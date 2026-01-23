@@ -26,14 +26,19 @@ const { EchoBot } = require('./bot');
 const server = restify.createServer();
 server.use(restify.plugins.bodyParser());
 
-server.listen(process.env.port || process.env.PORT || 3978, () => {
+const port = process.env.PORT || 3978;
+
+server.listen(port, '0.0.0.0', () => {
+    console.log(`Server running on port ${port}`);
+});
     console.log(`\n${ server.name } listening to ${ server.url }`);
     console.log('\nGet Bot Framework Emulator: https://aka.ms/botframework-emulator');
     console.log('\nTo talk to your bot, open the emulator select "Open Bot"');
 });
 
-server.get('/', (req, res) => {
-    res.send('ZAG Teams Bot API is running');
+server.get('/', (req, res, next) => {
+    res.send(200, 'ZAG Teams Bot API is running');
+    return next();
 });
 
 const botFrameworkAuthentication = new ConfigurationBotFrameworkAuthentication(process.env);

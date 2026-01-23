@@ -25,7 +25,7 @@ server.listen(process.env.PORT || 3978, () => {
 });
 
 // Root test endpoint
-server.get('/', (req, res) => {
+server.get('/', (req, res, next) => {
     res.send('ZAG Teams Bot API is running');
     return next();
 });

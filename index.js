@@ -32,6 +32,10 @@ server.listen(process.env.port || process.env.PORT || 3978, () => {
     console.log('\nTo talk to your bot, open the emulator select "Open Bot"');
 });
 
+server.get('/', (req, res) => {
+    res.send('ZAG Teams Bot API is running');
+});
+
 const botFrameworkAuthentication = new ConfigurationBotFrameworkAuthentication(process.env);
 
 // Create adapter.

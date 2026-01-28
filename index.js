@@ -6,10 +6,9 @@ const {
 
 const { TeamsAIBot } = require('./bot');
 
-// Azure App Service PORT
 const PORT = process.env.PORT || 8080;
 
-// Bot auth (env vars)
+// Bot authentication
 const botAuth = new ConfigurationBotFrameworkAuthentication(process.env);
 const adapter = new CloudAdapter(botAuth);
 
@@ -21,7 +20,7 @@ adapter.onTurnError = async (context, error) => {
 
 const bot = new TeamsAIBot();
 
-// Server
+// Restify server
 const server = restify.createServer();
 server.use(restify.plugins.bodyParser());
 

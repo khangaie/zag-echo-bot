@@ -17,7 +17,6 @@ class TeamsAIBot extends ActivityHandler {
 
       try {
         const result = await searchSharePoint(userText);
-
         const hits =
           result?.value?.[0]?.hitsContainers?.[0]?.hits || [];
 
@@ -30,7 +29,7 @@ class TeamsAIBot extends ActivityHandler {
         }
       } catch (err) {
         console.error('SharePoint error:', err);
-        spSummary = 'SharePoint хайлтад алдаа гарлаа.';
+        spSummary = 'SharePoint хайлт хийхэд алдаа гарлаа.';
       }
 
       let finalAnswer = spSummary;
@@ -47,7 +46,7 @@ class TeamsAIBot extends ActivityHandler {
 
     this.onMembersAdded(async (context, next) => {
       await context.sendActivity(
-        '👋 Сайн байна уу! Би ZAG AI Bot. SharePoint дээрээс хайж өгнө.'
+        '👋 Сайн байна уу! Би ZAG AI Bot. SharePoint-оос баримт хайж өгнө.'
       );
       await next();
     });

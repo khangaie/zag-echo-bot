@@ -1,120 +1,28 @@
 const axios = require('axios');
 
-/**
- * documents = [
- *   {
- *     fileName: 'Гэрээ_байгуулах_процесс.docx',
- *     folder: 'PROCESS-AI',
- *     url: 'https://sharepoint/...',
- *     content: 'баримтын текст...'
- *   }
- * ]
- */
-
-function calculateConfidence(documents) {
-  if (!documents || documents.length === 0) return 0;
-  if (documents.length >= 3) return 90;
-  if (documents.length === 2) return 75;
-  return 60;
-}
-
-async function askAI(userQuestion, documents = []) {
+async function callAzureOpenAI(messages, temperature = 0.1) {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
   const apiKey = process.env.AZURE_OPENAI_KEY;
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
 
   if (!endpoint || !apiKey || !deployment) {
-    return '⚠️ AI тохиргоо дутуу байна.';
+    throw new Error('Azure OpenAI env тохиргоо дутуу');
   }
-
-  // ❌ Баримт олдоогүй бол AI-г дуудахгүй
-  if (!documents || documents.length === 0) {
-    return `
-Энэ асуултад хариулах мэдээлэл ZAG компанийн SharePoint баримтад олдсонгүй.
-
-🟦 Дараагийн асуултууд:
-- Аль процессын талаар асууж байна вэ?
-- Ямар хэлтсийн баримт вэ?
-- Илүү тодорхой түлхүүр үг өгнө үү
-`;
-  }
-
-  // 📚 Олон баримтыг нэг текст болгох
-  const combinedText = documents.map((d, i) => `
-[${i + 1}]
-Файл: ${d.fileName}
-Folder: ${d.folder}
-Link: ${d.url}
-
-Агуулга:
-${d.content}
-`).join('\n\n');
-
-  const citations = documents.map((d, i) => `
-${i + 1}. ${d.fileName}
-   Folder: ${d.folder}
-   Link: ${d.url}
-`).join('\n');
-
-  const confidence = calculateConfidence(documents);
-
-  const systemPrompt = `
-Чи ZAG компанийн SharePoint баримтад үндэслэн хариулдаг AI Copilot.
-
-ХАТУУ ДҮРЭМ:
-1. Хариулт нь ЗӨВХӨН өгөгдсөн баримтын агуулгад тулгуурлана.
-2. Баримтад байхгүй мэдээллээр таамаглаж, ерөнхий хариулт өгөхийг ХОРИГЛОНО.
-3. Баримт англи байсан ч хариуг ЗААВАЛ МОНГОЛ хэлээр өг.
-4. Хариултын төгсгөлд:
-   - 📎 Ашигласан баримтууд (олон файл)
-   - 🧠 Эх сурвалжийн тайлбар
-   - 🧠 Confidence score (%)
-   - 🟦 3 Suggested questions
-   заавал оруул.
-`;
-
-  const payload = {
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt
-      },
-      {
-        role: 'user',
-        content: `
-Асуулт:
-${userQuestion}
-
-Баримтууд:
-${combinedText}
-`
-      }
-    ],
-    temperature: 0.1
-  };
 
   const url = `${endpoint}openai/deployments/${deployment}/chat/completions?api-version=2024-02-15-preview`;
 
-  const response = await axios.post(url, payload, {
-    headers: {
-      'api-key': apiKey,
-      'Content-Type': 'application/json'
+  const response = await axios.post(
+    url,
+    { messages, temperature },
+    {
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json'
+      }
     }
-  });
+  );
 
-  const aiAnswer = response.data.choices[0].message.content;
-
-  return `
-${aiAnswer}
-
-📎 Ашигласан баримтууд:
-${citations}
-
-🧠 Эх сурвалж:
-"Дээрх хариулт нь ZAG компанийн дотоод SharePoint баримтад үндэслэв."
-
-🧠 Confidence score: ${confidence}%
-`;
+  return response.data.choices[0].message.content;
 }
 
-module.exports = { askAI };
+module.exports = { callAzureOpenAI };

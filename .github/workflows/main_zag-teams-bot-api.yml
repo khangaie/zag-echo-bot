@@ -54,7 +54,6 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_102A6593BCB3449AB62A4CAB2E0AE99B }}
 
       - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'zag-teams-bot-api'
@@ -62,3 +61,4 @@ jobs:
           package: .
 
           
+

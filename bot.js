@@ -1,4 +1,4 @@
-const { ActivityHandler} = require('botbuilder');
+const { ActivityHandler, MessageFactory } = require('botbuilder');
 const { searchSharePoint } = require('./graph/sharepoint');
 const { askAI } = require('./graph/aiClient');
 
@@ -9,6 +9,7 @@ class TeamsAIBot extends ActivityHandler {
         this.onMessage(async (context, next) => {
             const userText = (context.activity.text || '').trim();
 
+            // Түр хариу
             await context.sendActivity(
                 MessageFactory.text('🔍 Хайж байна...')
             );
@@ -18,11 +19,13 @@ class TeamsAIBot extends ActivityHandler {
             try {
                 const result = await searchSharePoint(userText);
 
-                if (
-                    result?.hitsContainers?.[0]?.hits?.length > 0
-                ) {
-                    result.hitsContainers[0].hits.forEach(hit => {
-                        spSummary += `• ${hit.resource?.name}\n`;
+                // ✅ ЗӨВ Graph search response parse
+                const hits =
+                    result?.value?.[0]?.hitsContainers?.[0]?.hits || [];
+
+                if (hits.length > 0) {
+                    hits.forEach(hit => {
+                        spSummary += `• ${hit.resource?.name || 'Нэргүй файл'}\n`;
                     });
                 } else {
                     spSummary = 'Холбогдох файл олдсонгүй.';
@@ -32,7 +35,13 @@ class TeamsAIBot extends ActivityHandler {
                 spSummary = 'SharePoint хайлт хийхэд алдаа гарлаа.';
             }
 
-            const finalAnswer = await askAI(userText, spSummary);
+            // ✅ askAI унасан ч bot дуугүй болохоос сэргийлнэ
+            let finalAnswer = spSummary;
+            try {
+                finalAnswer = await askAI(userText, spSummary);
+            } catch (err) {
+                console.error('askAI error:', err);
+            }
 
             await context.sendActivity(finalAnswer);
             await next();
@@ -48,4 +57,5 @@ class TeamsAIBot extends ActivityHandler {
 }
 
 module.exports.TeamsAIBot = TeamsAIBot;
+
 

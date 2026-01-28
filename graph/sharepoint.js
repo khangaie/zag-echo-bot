@@ -28,4 +28,3 @@ async function searchSharePoint(query) {
 }
 
 module.exports = { searchSharePoint };
-

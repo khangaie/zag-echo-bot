@@ -22,7 +22,11 @@
         "botbuilder": "^4.23.1",
         "botframework-connector": "^4.23.1",
         "dotenv": "^8.2.0",
-        "restify": "^11.1.0"
+        "restify": "^11.1.0",
+
+        "axios": "^1.6.0",
+        "@microsoft/microsoft-graph-client": "^3.0.0",
+        "isomorphic-fetch": "^3.0.0"
     },
     "devDependencies": {
         "eslint": "^7.0.0",

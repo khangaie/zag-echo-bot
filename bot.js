@@ -16,8 +16,7 @@ class TeamsAIBot extends ActivityHandler {
             let spSummary = '';
 
             try {
-                const graphToken = process.env.GRAPH_TOKEN;
-                const result = await searchSharePoint(graphToken, userText);
+                const result = await searchSharePoint(userText);
 
                 if (
                     result?.hitsContainers?.[0]?.hits?.length > 0

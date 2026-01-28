@@ -1,52 +1,52 @@
-const { ActivityHandler } = require("botbuilder");
-const { searchSharePoint } = require("./sharepoint");
-const { askAI } = require("./aiClient");
+const { ActivityHandler, MessageFactory } = require('botbuilder');
+const { searchSharePoint } = require('./graph/sharepoint');
+const { askAI } = require('./aiClient');
 
 class TeamsAIBot extends ActivityHandler {
     constructor() {
         super();
 
-        // Message received
         this.onMessage(async (context, next) => {
-            const userText = context.activity.text;
+            const userText = (context.activity.text || '').trim();
 
-            await context.sendActivity("⏳ Хайж байна...");
+            await context.sendActivity(
+                MessageFactory.text('🔍 Хайж байна...')
+            );
 
-            // GRAPH TOKEN
-            const graphToken = process.env.GRAPH_TOKEN;
+            let spSummary = '';
 
-            // SharePoint дээрээс хайна
-            let spResults = "";
             try {
+                const graphToken = process.env.GRAPH_TOKEN;
                 const result = await searchSharePoint(graphToken, userText);
 
-                if (result?.value?.[0]?.hitsContainers?.[0]?.hits) {
-                    result.value[0].hitsContainers[0].hits.forEach(hit => {
-                        spResults += (hit.summary || "") + "\n";
+                if (
+                    result?.hitsContainers?.[0]?.hits?.length > 0
+                ) {
+                    result.hitsContainers[0].hits.forEach(hit => {
+                        spSummary += `• ${hit.resource?.name}\n`;
                     });
                 } else {
-                    spResults = "Тохирох контент олдсонгүй.";
+                    spSummary = 'Холбогдох файл олдсонгүй.';
                 }
             } catch (err) {
-                console.error("SharePoint Error:", err);
-                spResults = "SharePoint хайлт ажиллахад алдаа гарлаа.";
+                console.error('Graph error:', err);
+                spSummary = 'SharePoint хайлт хийхэд алдаа гарлаа.';
             }
 
-            // AI-аас хариу авах
-            const finalAnswer = await askAI(userText, spResults);
+            const finalAnswer = await askAI(userText, spSummary);
 
             await context.sendActivity(finalAnswer);
-
             await next();
         });
 
-        // User added to chat → Welcome
         this.onMembersAdded(async (context, next) => {
-            const welcome = "Сайн байна уу! 😊 Би байгууллагын дүрэм, журам, стандартуудаас мэдээлэл хайж өгдөг AI бот.";
-            await context.sendActivity(welcome);
+            await context.sendActivity(
+                '👋 Сайн байна уу! Би ZAG AI Bot. SharePoint дээрх баримтаас хайж өгнө.'
+            );
             await next();
         });
     }
 }
 
 module.exports.TeamsAIBot = TeamsAIBot;
+

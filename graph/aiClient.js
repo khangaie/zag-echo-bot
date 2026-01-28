@@ -9,15 +9,13 @@ async function askAI(userQuestion, contextText) {
     return '⚠️ AI тохиргоо дутуу байна.';
   }
 
-  const url =
-    `${endpoint}openai/deployments/${deployment}/chat/completions?api-version=2024-02-15-preview`;
+  const url = `${endpoint}openai/deployments/${deployment}/chat/completions?api-version=2024-02-15-preview`;
 
   const payload = {
     messages: [
       {
         role: 'system',
-        content:
-          'Чи ZAG компанийн дотоод SharePoint баримт дээр үндэслэн хариулдаг туслах AI.'
+        content: 'Чи ZAG компанийн SharePoint баримтад тулгуурлан хариулдаг AI.'
       },
       {
         role: 'user',
@@ -28,8 +26,8 @@ ${userQuestion}
 Холбогдох баримтууд:
 ${contextText}
 
-Дээрхэд үндэслэн ойлгомжтой хариул.
-        `
+Дээрх мэдээлэлд үндэслэн ойлгомжтой хариул.
+`
       }
     ],
     temperature: 0.2

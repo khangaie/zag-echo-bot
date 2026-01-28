@@ -1,6 +1,6 @@
-const { ActivityHandler, MessageFactory } = require('botbuilder');
+const { ActivityHandler} = require('botbuilder');
 const { searchSharePoint } = require('./graph/sharepoint');
-const { askAI } = require('./aiClient');
+const { askAI } = require('./graph/aiClient');
 
 class TeamsAIBot extends ActivityHandler {
     constructor() {

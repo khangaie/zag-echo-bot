@@ -1,6 +1,4 @@
 const restify = require('restify');
-require('dotenv').config();
-
 const {
   CloudAdapter,
   ConfigurationBotFrameworkAuthentication
@@ -8,34 +6,24 @@ const {
 
 const { TeamsAIBot } = require('./bot');
 
-// Create server
-const server = restify.createServer();
-server.use(restify.plugins.bodyParser());
+// Azure App Service PORT
+const PORT = process.env.PORT || 8080;
 
-server.listen(process.env.PORT || 3978, () => {
-  console.log(`Bot server running on ${server.url}`);
-});
-
-// Bot auth
-const botFrameworkAuthentication =
-  new ConfigurationBotFrameworkAuthentication(process.env);
-
-// Adapter
-const adapter = new CloudAdapter(botFrameworkAuthentication);
+// Bot auth (env vars)
+const botAuth = new ConfigurationBotFrameworkAuthentication(process.env);
+const adapter = new CloudAdapter(botAuth);
 
 // Error handler
 adapter.onTurnError = async (context, error) => {
   console.error('Bot error:', error);
-  await context.sendActivity('⚠️ Алдаа гарлаа.');
+  await context.sendActivity('⚠️ Алдаа гарлаа. Дахин оролдоно уу.');
 };
 
-// Bot
 const bot = new TeamsAIBot();
 
-// Messages endpoint
-server.post('/api/messages', async (req, res) => {
-  await adapter.process(req, res, (context) => bot.run(context));
-});
+// Server
+const server = restify.createServer();
+server.use(restify.plugins.bodyParser());
 
 // Health check
 server.get('/', (req, res, next) => {
@@ -43,3 +31,12 @@ server.get('/', (req, res, next) => {
   next();
 });
 
+// Bot endpoint
+server.post('/api/messages', async (req, res) => {
+  await adapter.process(req, res, (context) => bot.run(context));
+});
+
+// Listen
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

@@ -2,7 +2,7 @@ const axios = require('axios');
 const { getGraphToken } = require('./token');
 
 async function searchSharePoint(query) {
-  const accessToken = await getGraphToken();
+  const token = await getGraphToken();
 
   const url = 'https://graph.microsoft.com/v1.0/search/query';
 
@@ -10,7 +10,9 @@ async function searchSharePoint(query) {
     requests: [
       {
         entityTypes: ['driveItem'],
-        query: { queryString: query },
+        query: {
+          queryString: query
+        },
         from: 0,
         size: 5
       }
@@ -19,7 +21,7 @@ async function searchSharePoint(query) {
 
   const response = await axios.post(url, body, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
     }
   });

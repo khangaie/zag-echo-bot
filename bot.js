@@ -1,33 +1,52 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
+const { ActivityHandler } = require("botbuilder");
+const { searchSharePoint } = require("./sharepoint");
+const { askAI } = require("./aiClient");
 
-// @ts-check
-
-const { ActivityHandler, MessageFactory } = require('botbuilder');
-
-class EchoBot extends ActivityHandler {
+class TeamsAIBot extends ActivityHandler {
     constructor() {
         super();
-        // See https://aka.ms/about-bot-activity-message to learn more about the message and other activity types.
+
+        // Message received
         this.onMessage(async (context, next) => {
-            const replyText = `Echo: ${ context.activity.text }`;
-            await context.sendActivity(MessageFactory.text(replyText, replyText));
-            // By calling next() you ensure that the next BotHandler is run.
+            const userText = context.activity.text;
+
+            await context.sendActivity("⏳ Хайж байна...");
+
+            // GRAPH TOKEN
+            const graphToken = process.env.GRAPH_TOKEN;
+
+            // SharePoint дээрээс хайна
+            let spResults = "";
+            try {
+                const result = await searchSharePoint(graphToken, userText);
+
+                if (result?.value?.[0]?.hitsContainers?.[0]?.hits) {
+                    result.value[0].hitsContainers[0].hits.forEach(hit => {
+                        spResults += (hit.summary || "") + "\n";
+                    });
+                } else {
+                    spResults = "Тохирох контент олдсонгүй.";
+                }
+            } catch (err) {
+                console.error("SharePoint Error:", err);
+                spResults = "SharePoint хайлт ажиллахад алдаа гарлаа.";
+            }
+
+            // AI-аас хариу авах
+            const finalAnswer = await askAI(userText, spResults);
+
+            await context.sendActivity(finalAnswer);
+
             await next();
         });
 
+        // User added to chat → Welcome
         this.onMembersAdded(async (context, next) => {
-            const membersAdded = context.activity.membersAdded ?? [];
-            const welcomeText = 'Hello and welcome!';
-            for (let cnt = 0; cnt < membersAdded.length; ++cnt) {
-                if (membersAdded[cnt].id !== context.activity.recipient.id) {
-                    await context.sendActivity(MessageFactory.text(welcomeText, welcomeText));
-                }
-            }
-            // By calling next() you ensure that the next BotHandler is run.
+            const welcome = "Сайн байна уу! 😊 Би байгууллагын дүрэм, журам, стандартуудаас мэдээлэл хайж өгдөг AI бот.";
+            await context.sendActivity(welcome);
             await next();
         });
     }
 }
 
-module.exports.EchoBot = EchoBot;
+module.exports.TeamsAIBot = TeamsAIBot;

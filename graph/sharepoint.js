@@ -1,36 +1,40 @@
 const axios = require('axios');
 
 /**
- * SharePoint / OneDrive дээрээс текстээр хайна
+ * SharePoint дээр текст хайх
  * @param {string} accessToken - Microsoft Graph access token
- * @param {string} query - хэрэглэгчийн асуулт
+ * @param {string} query - Хэрэглэгчийн асуулт
  */
 async function searchSharePoint(accessToken, query) {
-    const url = 'https://graph.microsoft.com/v1.0/search/query';
+  if (!accessToken) {
+    throw new Error('GRAPH_TOKEN байхгүй байна');
+  }
 
-    const body = {
-        requests: [
-            {
-                entityTypes: ['driveItem'],
-                query: {
-                    queryString: query
-                },
-                from: 0,
-                size: 5
-            }
-        ]
-    };
+  const url = 'https://graph.microsoft.com/v1.0/search/query';
 
-    const response = await axios.post(url, body, {
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-        }
-    });
+  const body = {
+    requests: [
+      {
+        entityTypes: ['driveItem'],
+        query: {
+          queryString: query
+        },
+        from: 0,
+        size: 5
+      }
+    ]
+  };
 
-    return response.data.value[0];
+  const response = await axios.post(url, body, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  return response.data;
 }
 
 module.exports = {
-    searchSharePoint
+  searchSharePoint
 };

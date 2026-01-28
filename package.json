@@ -1,5 +1,5 @@
 {
-  "name": "echobot",
+  "name": "zag-echo-bot",
   "version": "1.0.0",
   "description": "ZAG Teams Bot",
   "main": "index.js",
@@ -13,6 +13,6 @@
     "axios": "^1.6.0",
     "botbuilder": "^4.23.1",
     "restify": "^11.1.0",
-    "@azure/msal-node": "^2.7.0"
+    "@azure/msal-node": "^2.16.0"
   }
 }

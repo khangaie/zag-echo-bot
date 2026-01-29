@@ -12,7 +12,6 @@ async function getGraphToken() {
   const result = await msalClient.acquireTokenByClientCredential({
     scopes: ['https://graph.microsoft.com/.default']
   });
-
   return result.accessToken;
 }
 

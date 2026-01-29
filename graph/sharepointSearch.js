@@ -1,5 +1,10 @@
 const axios = require('axios');
 
+/**
+ * Search SharePoint / OneDrive documents via Microsoft Graph
+ * @param {string} query
+ * @param {string} accessToken
+ */
 async function searchSharePoint(query, accessToken) {
   const url = 'https://graph.microsoft.com/v1.0/search/query';
 
@@ -29,13 +34,13 @@ async function searchSharePoint(query, accessToken) {
 
     return hits.map(h => ({
       fileName: h.resource?.name || 'Unknown',
-      folder: h.resource?.parentReference?.path || 'Unknown',
+      path: h.resource?.parentReference?.path || '',
       url: h.resource?.webUrl || '',
-      content: h.resource?.summary || ''
+      summary: h.resource?.summary || ''
     }));
   } catch (err) {
-    console.error('❌ SharePoint search error:', err.response?.data || err.message);
-    throw new Error('SharePoint хайлт амжилтгүй');
+    console.error('Graph search error:', err.response?.data || err.message);
+    throw new Error('SharePoint хайлт амжилтгүй боллоо');
   }
 }
 

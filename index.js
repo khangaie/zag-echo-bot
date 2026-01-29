@@ -24,7 +24,7 @@ const bot = new TeamsAIBot();
 const server = restify.createServer();
 server.use(restify.plugins.bodyParser());
 
-// ✅ Health check (ЗАСАГДСАН)
+// ✅ HEALTH CHECK — ЭНЭ Л ГОЛ АСУУДАЛ БАЙСАН
 server.get('/', async (req, res) => {
   res.send('ZAG Teams Bot API is running');
 });

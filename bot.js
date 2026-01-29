@@ -1,7 +1,7 @@
 const { ActivityHandler, MessageFactory } = require('botbuilder');
 const { searchSharePoint } = require('./graph/sharepointSearch');
-const { getGraphToken } = require('./graph/token'); // ⬅️ заавал
-const { askAI } = require('./graph/aiClient');
+const { getGraphToken } = require('./graph/token');
+const { askAI } = require('./graph/askAI');
 
 class TeamsAIBot extends ActivityHandler {
   constructor() {
@@ -14,42 +14,33 @@ class TeamsAIBot extends ActivityHandler {
         MessageFactory.text('🔍 Хайж байна...')
       );
 
-      let spSummary = '';
+      let documents = [];
 
       try {
-        // 1️⃣ Graph access token авна
         const accessToken = await getGraphToken();
-
-        // 2️⃣ SharePoint хайлт
-        const results = await searchSharePoint(userText, accessToken);
-
-        if (results.length > 0) {
-          results.forEach(r => {
-            spSummary += `📄 ${r.fileName}\n🔗 ${r.url}\n\n`;
-          });
-        } else {
-          spSummary = 'Холбогдох файл олдсонгүй.';
-        }
+        documents = await searchSharePoint(userText, accessToken);
       } catch (err) {
         console.error('SharePoint error:', err);
-        spSummary = 'SharePoint хайлт хийхэд алдаа гарлаа.';
+        await context.sendActivity('SharePoint хайлт хийхэд алдаа гарлаа.');
+        await next();
+        return;
       }
 
-      let finalAnswer = spSummary;
-
+      let answer;
       try {
-        finalAnswer = await askAI(userText, spSummary);
+        answer = await askAI(userText, documents);
       } catch (err) {
         console.error('AI error:', err);
+        answer = 'AI хариу үүсгэхэд алдаа гарлаа.';
       }
 
-      await context.sendActivity(finalAnswer);
+      await context.sendActivity(answer);
       await next();
     });
 
     this.onMembersAdded(async (context, next) => {
       await context.sendActivity(
-        '👋 Сайн байна уу! Би ZAG AI Bot. SharePoint-оос баримт хайж өгнө.'
+        '👋 Сайн байна уу! Би ZAG AI Bot. Компанийн мэдээллийн сангаас баримт хайж өгнө.'
       );
       await next();
     });

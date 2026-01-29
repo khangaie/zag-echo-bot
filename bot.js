@@ -1,5 +1,6 @@
 const { ActivityHandler, MessageFactory } = require('botbuilder');
-const { searchSharePoint } = require('./graph/sharepoint');
+const { searchSharePoint } = require('./graph/sharepointSearch');
+const { getGraphToken } = require('./graph/token'); // ⬅️ заавал
 const { askAI } = require('./graph/aiClient');
 
 class TeamsAIBot extends ActivityHandler {
@@ -16,13 +17,15 @@ class TeamsAIBot extends ActivityHandler {
       let spSummary = '';
 
       try {
-        const result = await searchSharePoint(userText);
-        const hits =
-          result?.value?.[0]?.hitsContainers?.[0]?.hits || [];
+        // 1️⃣ Graph access token авна
+        const accessToken = await getGraphToken();
 
-        if (hits.length > 0) {
-          hits.forEach(h => {
-            spSummary += `• ${h.resource?.name}\n`;
+        // 2️⃣ SharePoint хайлт
+        const results = await searchSharePoint(userText, accessToken);
+
+        if (results.length > 0) {
+          results.forEach(r => {
+            spSummary += `📄 ${r.fileName}\n🔗 ${r.url}\n\n`;
           });
         } else {
           spSummary = 'Холбогдох файл олдсонгүй.';

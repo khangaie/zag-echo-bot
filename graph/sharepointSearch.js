@@ -6,7 +6,7 @@ async function searchSharePoint(query, accessToken) {
   const payload = {
     requests: [
       {
-        entityTypes: ['listItem'],
+        entityTypes: ['DriveItem'],
         query: { queryString: query },
         from: 0,
         size: 5

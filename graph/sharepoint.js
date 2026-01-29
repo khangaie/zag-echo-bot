@@ -9,7 +9,7 @@ async function searchSharePoint(query) {
   const body = {
     requests: [
       {
-        entityTypes: ['driveItem'],
+        entityTypes: ['listItem'],
         query: {
           queryString: query
         },

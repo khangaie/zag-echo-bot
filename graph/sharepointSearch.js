@@ -16,22 +16,27 @@ async function searchSharePoint(query, accessToken) {
     ]
   };
 
-  const response = await axios.post(url, payload, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  try {
+    const response = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
 
-  const hits =
-    response.data.value[0]?.hitsContainers[0]?.hits || [];
+    const hits =
+      response.data?.value?.[0]?.hitsContainers?.[0]?.hits || [];
 
-  return hits.map(h => ({
-    fileName: h.resource.name,
-    folder: h.resource.parentReference?.path || 'Unknown',
-    url: h.resource.webUrl,
-    content: h.resource?.summary || ''
-  }));
+    return hits.map(h => ({
+      fileName: h.resource?.name || 'Unknown',
+      folder: h.resource?.parentReference?.path || 'Unknown',
+      url: h.resource?.webUrl || '',
+      content: h.resource?.summary || ''
+    }));
+  } catch (err) {
+    console.error('❌ SharePoint search error:', err.response?.data || err.message);
+    throw new Error('SharePoint хайлт амжилтгүй');
+  }
 }
 
 module.exports = { searchSharePoint };

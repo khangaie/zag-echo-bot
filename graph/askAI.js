@@ -1,81 +1,41 @@
-const { callAzureOpenAI } = require('./aiclient');
+const { callAzureOpenAI } = require('./aiClient');
 
-/**
- * documents = [
- *   {
- *     fileName: 'Гэрээ_байгуулах_процесс.docx',
- *     folder: 'PROCESS-AI',
- *     url: 'https://sharepoint/...',
- *     content: 'баримтын текст'
- *   }
- * ]
- */
-
-function calculateConfidence(documents) {
-  if (!documents || documents.length === 0) return 0;
-  if (documents.length >= 3) return 90;
-  if (documents.length === 2) return 75;
-  return 60;
+function confidenceScore(docs) {
+  if (docs.length === 0) return 0;
+  if (docs.length === 1) return 60;
+  if (docs.length === 2) return 75;
+  return 90;
 }
 
-async function askAI(userQuestion, documents = []) {
-  // ❌ Баримтгүй бол AI-г огт дуудахгүй
-  if (!documents || documents.length === 0) {
+async function askAI(question, documents = []) {
+  if (documents.length === 0) {
     return `
-Энэ асуултад хариулах мэдээлэл ZAG компанийн SharePoint баримтад олдсонгүй.
+Энэ асуултад хариулах баримт олдсонгүй.
 
-🟦 Санал болгох асуултууд:
-- Аль процессын талаар асууж байна вэ?
-- Ямар хэлтсийн баримт вэ?
-- Илүү тодорхой түлхүүр үг өгнө үү
+💡 Suggested questions:
+• Аль процессын талаар асууж байна вэ?
+• Ямар баримт хайж байна вэ?
+• Түлхүүр үг өгнө үү
 `;
   }
 
-  const combinedText = documents.map((d, i) => `
-[${i + 1}]
-Файл: ${d.fileName}
-Folder: ${d.folder}
-Link: ${d.url}
+  const citations = documents
+    .map((d, i) => `${i + 1}. ${d.fileName} – ${d.url}`)
+    .join('\n');
 
-Агуулга:
-${d.content}
-`).join('\n\n');
-
-  const citations = documents.map((d, i) => `
-${i + 1}. ${d.fileName}
-   Folder: ${d.folder}
-   Link: ${d.url}
-`).join('\n');
-
-  const confidence = calculateConfidence(documents);
+  const contextText = documents
+    .map(d => `Файл: ${d.fileName}\n${d.content}`)
+    .join('\n\n');
 
   const messages = [
     {
       role: 'system',
-      content: `
-Чи ZAG компанийн SharePoint баримтад үндэслэн хариулдаг AI Copilot.
-
-ХАТУУ ДҮРЭМ:
-1. Хариулт нь ЗӨВХӨН өгөгдсөн баримтын агуулгад тулгуурлана.
-2. Баримтад байхгүй мэдээллээр таамаглаж, ерөнхий хариулт өгөхийг ХОРИГЛОНО.
-3. Баримт англи байсан ч хариуг ЗААВАЛ МОНГОЛ хэлээр өг.
-4. Хариултын төгсгөлд:
-   - 📎 Ашигласан баримтууд
-   - 🧠 Эх сурвалж
-   - 🧠 Confidence score
-   - 🟦 3 Suggested questions
-   заавал оруул.
-`
+      content:
+        'Та зөвхөн өгөгдсөн SharePoint баримтад тулгуурлан хариулна.'
     },
     {
       role: 'user',
-      content: `
-Асуулт:
-${userQuestion}
-
-Баримтууд:
-${combinedText}
-`
+      content: `Асуулт: ${question}\n\nБаримтууд:\n${contextText}`
     }
   ];
 
@@ -84,14 +44,12 @@ ${combinedText}
   return `
 ${aiAnswer}
 
-📎 Ашигласан баримтууд:
+📎 Эдгээр баримтад үндэслэв:
 ${citations}
 
-🧠 Эх сурвалж:
-"Дээрх хариулт нь ZAG компанийн дотоод SharePoint баримтад үндэслэв."
-
-🧠 Confidence score: ${confidence}%
+🧠 Confidence score: ${confidenceScore(documents)}%
 `;
 }
 
 module.exports = { askAI };
+

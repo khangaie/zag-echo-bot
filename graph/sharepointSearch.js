@@ -6,8 +6,10 @@ async function searchSharePoint(query, accessToken) {
   const payload = {
     requests: [
       {
-        entityTypes: ['DriveItem'],
-        query: { queryString: query },
+        entityTypes: ['driveItem'], // ✅ lowercase
+        query: {
+          queryString: query
+        },
         from: 0,
         size: 5
       }
@@ -22,7 +24,7 @@ async function searchSharePoint(query, accessToken) {
   });
 
   const hits =
-    res.data.value?.[0]?.hitsContainers?.[0]?.hits || [];
+    res.data?.value?.[0]?.hitsContainers?.[0]?.hits || [];
 
   return hits.map(h => ({
     fileName: h.resource?.name,

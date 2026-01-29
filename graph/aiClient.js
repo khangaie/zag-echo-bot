@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-async function callAzureOpenAI(messages, temperature = 0.1) {
+async function callAzureOpenAI(messages, temperature = 0.2) {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
   const apiKey = process.env.AZURE_OPENAI_KEY;
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
@@ -9,9 +9,9 @@ async function callAzureOpenAI(messages, temperature = 0.1) {
     throw new Error('Azure OpenAI env тохиргоо дутуу');
   }
 
-  const url = `${endpoint}openai/deployments/${deployment}/chat/completions?api-version=2024-02-15-preview`;
+  const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=2024-02-15-preview`;
 
-  const response = await axios.post(
+  const res = await axios.post(
     url,
     { messages, temperature },
     {
@@ -22,7 +22,7 @@ async function callAzureOpenAI(messages, temperature = 0.1) {
     }
   );
 
-  return response.data.choices[0].message.content;
+  return res.data.choices[0].message.content;
 }
 
 module.exports = { callAzureOpenAI };

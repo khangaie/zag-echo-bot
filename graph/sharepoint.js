@@ -1,17 +1,15 @@
 const axios = require('axios');
-const { getGraphToken } = require('./token');
 
-async function searchSharePoint(query) {
-  const token = await getGraphToken();
-
+async function searchSharePoint(query, accessToken) {
   const url = 'https://graph.microsoft.com/v1.0/search/query';
 
-  const body = {
+  const payload = {
     requests: [
       {
-        entityTypes: ['listItem'],
+        entityTypes: ['driveItem'],
         query: {
-          queryString: query
+          queryString: query,
+          queryTemplate: '{searchTerms}'
         },
         from: 0,
         size: 5
@@ -19,14 +17,30 @@ async function searchSharePoint(query) {
     ]
   };
 
-  const response = await axios.post(url, body, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  try {
+    const res = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
 
-  return response.data;
+    const hits =
+      res.data?.value?.[0]?.hitsContainers?.[0]?.hits || [];
+
+    return hits.map(h => ({
+      fileName: h.resource?.name,
+      url: h.resource?.webUrl,
+      folder: h.resource?.parentReference?.path || '',
+      content: h.resource?.summary || ''
+    }));
+  } catch (err) {
+    console.error(
+      'SharePoint Graph error:',
+      err.response?.data || err.message
+    );
+    throw err;
+  }
 }
 
 module.exports = { searchSharePoint };

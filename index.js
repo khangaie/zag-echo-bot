@@ -25,7 +25,7 @@ const server = restify.createServer();
 server.use(restify.plugins.bodyParser());
 
 // ✅ Health check (Azure шалгахад маш чухал)
-server.get('/', (req, res) => {
+server.get('/', async (req, res) => {
   res.send('ZAG Teams Bot is running ✅');
 });
 

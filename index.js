@@ -22,7 +22,7 @@ server.get('/', (req, res, next) => {
   next();
 });
 
-server.post('/api/messages', (req, res) => {
+server.post('/api/messages', async (req, res) => {
   adapter.process(req, res, (context) => bot.run(context));
 });
 

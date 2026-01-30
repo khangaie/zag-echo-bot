@@ -6,7 +6,7 @@ async function searchSharePoint(query, accessToken) {
   const payload = {
     requests: [
       {
-        entityTypes: ['driveItem'], // ✅ lowercase
+        entityTypes: ['DriveItem'], // ⬅️ TOM D ҮСЭГТЭЙ!
         query: {
           queryString: query
         },
@@ -16,22 +16,31 @@ async function searchSharePoint(query, accessToken) {
     ]
   };
 
-  const res = await axios.post(url, payload, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  try {
+    const res = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
 
-  const hits =
-    res.data?.value?.[0]?.hitsContainers?.[0]?.hits || [];
+    const hits =
+      res.data.value?.[0]?.hitsContainers?.[0]?.hits || [];
 
-  return hits.map(h => ({
-    fileName: h.resource?.name,
-    url: h.resource?.webUrl,
-    folder: h.resource?.parentReference?.path || '',
-    content: h.resource?.summary || ''
-  }));
+    return hits.map(h => ({
+      fileName: h.resource?.name,
+      url: h.resource?.webUrl,
+      folder: h.resource?.parentReference?.path || '',
+      content: h.resource?.summary || ''
+    }));
+
+  } catch (err) {
+    console.error(
+      'SharePoint search error:',
+      err.response?.data || err.message
+    );
+    throw err;
+  }
 }
 
 module.exports = { searchSharePoint };

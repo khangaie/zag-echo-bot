@@ -1,40 +1,31 @@
 const restify = require('restify');
-const {
-  CloudAdapter,
-  ConfigurationBotFrameworkAuthentication
-} = require('botbuilder');
-
+const { CloudAdapter, ConfigurationBotFrameworkAuthentication } = require('botbuilder');
 const { TeamsAIBot } = require('./bot');
 
 const PORT = process.env.PORT || 8080;
 
-// 🔐 Bot authentication (Azure App Service env ашиглана)
 const botAuth = new ConfigurationBotFrameworkAuthentication(process.env);
 const adapter = new CloudAdapter(botAuth);
 
-// ❗ Global error handler
 adapter.onTurnError = async (context, error) => {
-  console.error('Bot error:', error);
-  await context.sendActivity('⚠️ Алдаа гарлаа. Түр хүлээгээрэй.');
+  console.error(error);
+  await context.sendActivity('⚠️ Алдаа гарлаа. Дахин оролдоно уу.');
 };
 
 const bot = new TeamsAIBot();
 
-// 🌐 Restify server
 const server = restify.createServer();
 server.use(restify.plugins.bodyParser());
 
-// ✅ Health check (Azure шалгахад маш чухал)
-server.get('/', async (req, res) => {
-  res.send('ZAG Teams Bot is running ✅');
+server.get('/', (req, res, next) => {
+  res.send(200, 'ZAG Copilot Bot is running');
+  next();
 });
 
-// 🤖 Bot endpoint
-server.post('/api/messages', async (req, res) => {
-  await adapter.process(req, res, (context) => bot.run(context));
+server.post('/api/messages', (req, res) => {
+  adapter.process(req, res, (context) => bot.run(context));
 });
 
-// ▶️ Start server
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server started on port ${PORT}`);
 });

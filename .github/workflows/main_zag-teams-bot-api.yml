@@ -21,7 +21,7 @@ jobs:
 
       # 👉 ЭНД npm install хийнэ (хамгийн чухал)
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       # 👉 ЭНД Azure руу deploy хийнэ
       - name: Deploy to Azure Web App
@@ -30,3 +30,4 @@ jobs:
           app-name: zag-teams-bot-api
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: .
+

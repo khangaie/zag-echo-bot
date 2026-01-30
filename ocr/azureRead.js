@@ -1,31 +1,20 @@
-const { FormRecognizerClient, AzureKeyCredential } =
-  require("@azure/ai-form-recognizer");
+const { DocumentAnalysisClient, AzureKeyCredential } =
+  require('@azure/ai-form-recognizer');
 
-async function readWithOCR(fileUrl) {
-  const endpoint = process.env.AZURE_FORM_ENDPOINT;
-  const key = process.env.AZURE_FORM_KEY;
+const client = new DocumentAnalysisClient(
+  process.env.AZURE_FORM_ENDPOINT,
+  new AzureKeyCredential(process.env.AZURE_FORM_KEY)
+);
 
-  if (!endpoint || !key) {
-    return { text: "", confidence: 0 };
-  }
-
-  const client = new FormRecognizerClient(
-    endpoint,
-    new AzureKeyCredential(key)
+async function extractTextWithOCR(buffer) {
+  const poller = await client.beginAnalyzeDocument(
+    'prebuilt-read',
+    buffer
   );
 
-  const poller = await client.beginRecognizeContentFromUrl(fileUrl);
-  const pages = await poller.pollUntilDone();
+  const result = await poller.pollUntilDone();
 
-  let text = "";
-  pages.forEach(p =>
-    p.lines.forEach(l => (text += l.text + "\n"))
-  );
-
-  return {
-    text,
-    confidence: 0.95
-  };
+  return result.content || '';
 }
 
-module.exports = { readWithOCR };
+module.exports = { extractTextWithOCR };

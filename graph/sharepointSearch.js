@@ -1,32 +1,48 @@
-const axios = require("axios");
-
-const SITE_ID =
-  "zagengineering.sharepoint.com,4ffeaa0c-8ee5-474b-844f-82344651c399,a91eeb81-1e30-4f71-968d-96e1d034da50";
-
-async function searchSharePoint(query, accessToken) {
-  const url = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/search(q='${encodeURIComponent(
-    query
-  )}')`;
-
-  try {
-    const res = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    return res.data.value.map((item) => ({
-      fileName: item.name,
-      url: item.webUrl,
-      lastModified: item.lastModifiedDateTime,
-    }));
-  } catch (err) {
-    console.error(
-      "SharePoint search error:",
-      err.response?.data || err.message
-    );
-    throw err;
-  }
+const axios = require('axios');
+/**
+* SharePoint site + library доторх файлуудыг хайна
+* Application permission (client credentials) ашиглана
+*/
+async function searchSharePointFiles({
+ accessToken,
+ siteId,
+ query,
+ fileTypes = ['pdf']
+}) {
+ const files = [];
+ if (!siteId) {
+   throw new Error('❌ siteId is required');
+ }
+ console.log('🔎 SharePoint search:', query);
+ // Site дээр search хийх
+ const searchUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/search(q='${encodeURIComponent(
+   query
+ )}')`;
+ const res = await axios.get(searchUrl, {
+   headers: {
+     Authorization: `Bearer ${accessToken}`
+   }
+ });
+ const items = res.data?.value || [];
+ for (const item of items) {
+   // File биш бол алгасна
+   if (!item.file || !item.name) continue;
+   const ext = item.name.split('.').pop().toLowerCase();
+   if (!fileTypes.includes(ext)) continue;
+   // driveId + itemId заавал хэрэгтэй
+   const driveId = item.parentReference?.driveId;
+   const itemId = item.id;
+   if (!driveId || !itemId) {
+     console.warn('⚠️ Missing driveId/itemId for:', item.name);
+     continue;
+   }
+   files.push({
+     id: itemId,
+     driveId,
+     fileName: item.name
+   });
+ }
+ console.log(`📄 Found ${files.length} files`);
+ return files;
 }
-
-module.exports = { searchSharePoint };
+module.exports = { searchSharePointFiles };

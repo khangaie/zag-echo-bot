@@ -23,7 +23,7 @@ server.get('/', (req, res, next) => {
 });
 
 server.post('/api/messages', async (req, res) => {
-  adapter.process(req, res, (context) => bot.run(context));
+ await adapter.process(req, res, (context) => await bot.run(context));
 });
 
 server.listen(PORT, () => {

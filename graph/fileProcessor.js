@@ -1,28 +1,26 @@
-const axios = require("axios");
-const { extractTextWithOCR } = require("../ocr/azureRead"); // ⚠ зөв зам
-const { getGraphToken } = require("./token");
-async function processFiles(files) {
+const axios = require('axios');
+const { extractTextWithOCR } = require('../ocr/azureRead');
+async function processFiles(files, accessToken) {
  const extractedTextMap = {};
  let ocrUsed = false;
- // 🔑 Graph access token ЭНДЭЭС авна
- const accessToken = await getGraphToken();
+ if (!accessToken) {
+   throw new Error('processFiles: accessToken байхгүй');
+ }
  for (const file of files) {
    try {
-     // 1️⃣ SharePoint file татах
-     const res = await axios.get(file.downloadUrl, {
+     const res = await axios.get(file.webUrl, {
        headers: {
-         Authorization: `Bearer ${accessToken}`,
+         Authorization: `Bearer ${accessToken}`
        },
-       responseType: "arraybuffer",
+       responseType: 'arraybuffer'
      });
-     // 2️⃣ PDF бол OCR
-     if (file.name.toLowerCase().endsWith(".pdf")) {
+     if (file.name.toLowerCase().endsWith('.pdf')) {
        const text = await extractTextWithOCR(res.data);
        extractedTextMap[file.name] = text;
        ocrUsed = true;
      }
    } catch (e) {
-     console.error("File process error:", e.response?.status, e.message);
+     console.error('File process error:', e.message);
    }
  }
  return { extractedTextMap, ocrUsed };

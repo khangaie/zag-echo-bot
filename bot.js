@@ -1,61 +1,57 @@
-const { ActivityHandler } = require('botbuilder');
-const { detectIntent } = require('./ai/intentDetector');
-const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
-const { getGraphToken } = require('./graph/token');
+const { ActivityHandler, CardFactory } = require('botbuilder');
 const { searchSharePoint } = require('./graph/sharepointSearch');
+const { getGraphToken } = require('./graph/token');
 const { processFiles } = require('./graph/fileProcessor');
-class Bot extends ActivityHandler {
- constructor() {
-   super();
-   this.onMessage(async (context, next) => {
-     const question = context.activity.text?.trim();
-     if (!question) {
-       await context.sendActivity('Асуултаа бичнэ үү.');
+const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
+function createBot() {
+ const bot = new ActivityHandler();
+ bot.onMessage(async (context, next) => {
+   try {
+     const question = (context.activity.text || '').trim();
+     if (!question) return;
+     await context.sendActivity('🔍 Баримтаас хайж байна...');
+     // 🔑 Graph access token
+     const accessToken = await getGraphToken();
+     // 📂 SharePoint хайлт
+     const files = await searchSharePoint(question, accessToken);
+     if (!files || files.length === 0) {
+       await context.sendActivity('❌ Тохирох баримт олдсонгүй.');
        return;
      }
-     await context.sendActivity('🔍 Баримтаас хайж байна...');
-     try {
-       // 1️⃣ Intent тодорхойлох
-       const intent = detectIntent(question);
-       // 2️⃣ Graph access token авах
-       const accessToken = await getGraphToken();
-       // 3️⃣ SharePoint хайлт
-       const files = await searchSharePoint({
-         query: question,
-         accessToken
-       });
-       if (!files || files.length === 0) {
-         await context.sendActivity(
-           buildCopilotResponse({
-             question,
-             intent,
-             extractedTextMap: {},
-             files: [],
-             ocrUsed: false
-           })
-         );
-         return;
-       }
-       // 4️⃣ Файлуудыг OCR / текст болгох
-       const { extractedTextMap, ocrUsed } =
-         await processFiles(files, accessToken);
-       // 5️⃣ Эцсийн Copilot response
-       const response = buildCopilotResponse({
-         question,
-         intent,
-         extractedTextMap,
-         files,
-         ocrUsed
-       });
-       await context.sendActivity(response);
-     } catch (err) {
-       console.error('Bot error:', err);
-       await context.sendActivity(
-         '❌ SharePoint-оос мэдээлэл авах үед алдаа гарлаа.'
-       );
-     }
-     await next();
-   });
- }
+     // 📄 Файл OCR / уншилт
+     const { extractedTextMap, ocrUsed } =
+       await processFiles(files, accessToken);
+     // 🤖 Copilot response
+     const response = buildCopilotResponse({
+       question,
+       files,
+       extractedTextMap,
+       ocrUsed
+     });
+     await context.sendActivity({
+       attachments: [
+         CardFactory.adaptiveCard(response.adaptiveCard)
+       ]
+     });
+   } catch (err) {
+     console.error('BOT ERROR:', err);
+     await context.sendActivity(
+       '❌ Алдаа гарлаа. Системийн лог шалгана уу.'
+     );
+   }
+   await next();
+ });
+ bot.onMembersAdded(async (context) => {
+   await context.sendActivity(
+     '👋 **Сайн байна уу!**\n\n' +
+     '🤖 **ZAG AI Bot**\n' +
+     '• Процесс тайлбарлана\n' +
+     '• Summary гаргана\n' +
+     '• Холбогдох баримт хайж өгнө\n' +
+     '• BPMN diagram үүсгэнэ\n\n' +
+     '✍️ Жишээ асуулт: **"Гэрээ байгуулах процесс"**'
+   );
+ });
+ return bot;
 }
-module.exports.Bot = Bot;
+module.exports = { createBot };

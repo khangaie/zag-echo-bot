@@ -10,7 +10,7 @@ class ZAGBot extends ActivityHandler {
      try {
        const question = (context.activity.text || '').trim();
        if (!question) return;
-       await context.sendActivity('🔍 Баримтаас хайж байна...');
+       await context.sendActivity('🔍 Баримт хайж байна…');
        const accessToken = await getGraphToken();
        const files = await searchSharePoint(question, accessToken);
        if (!files.length) {
@@ -28,20 +28,18 @@ class ZAGBot extends ActivityHandler {
        await context.sendActivity({
          attachments: [CardFactory.adaptiveCard(response.adaptiveCard)]
        });
+       await next();
      } catch (err) {
        console.error('BOT ERROR:', err);
-       await context.sendActivity('❌ Алдаа гарлаа. Системийн лог шалгана уу.');
+       await context.sendActivity('❌ Алдаа гарлаа.');
      }
-     await next();
    });
    this.onMembersAdded(async (context) => {
      await context.sendActivity(
        '👋 Сайн байна уу!\n\n' +
-       '🤖 ZAG AI Bot\n' +
-       '• Процесс тайлбарлана\n' +
-       '• SharePoint баримт хайна\n' +
-       '• Copilot маягийн хариу өгнө\n\n' +
-       'Жишээ: **Гэрээ байгуулах процесс**'
+       '• SharePoint баримтаас хайна\n' +
+       '• Scanned PDF → Монгол OCR\n' +
+       '• Процесс → BPMN гаргана\n'
      );
    });
  }

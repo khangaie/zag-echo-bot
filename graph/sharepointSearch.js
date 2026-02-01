@@ -1,5 +1,4 @@
 const { Client } = require('@microsoft/microsoft-graph-client');
-require('isomorphic-fetch');
 const { getGraphToken } = require('./token');
 async function searchSharePoint(query) {
  const accessToken = await getGraphToken();

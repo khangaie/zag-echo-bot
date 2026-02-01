@@ -1,37 +1,33 @@
-const axios = require('axios');
-/**
-* SharePoint дээр файл хайх
-*/
-async function searchSharePoint({ query, accessToken }) {
- if (!accessToken) {
-   throw new Error('accessToken байхгүй');
- }
- const endpoint = 'https://graph.microsoft.com/v1.0/search/query';
- const body = {
-   requests: [
-     {
-       entityTypes: ['driveItem'],
-       query: {
-         queryString: query
-       },
-       from: 0,
-       size: 5
-     }
-   ]
- };
- const res = await axios.post(endpoint, body, {
-   headers: {
-     Authorization: `Bearer ${accessToken}`,
-     'Content-Type': 'application/json'
-   }
+const { Client } = require('@microsoft/microsoft-graph-client');
+require('isomorphic-fetch');
+const { getGraphToken } = require('./token');
+async function searchSharePoint(query) {
+ const accessToken = await getGraphToken();
+ const client = Client.init({
+   authProvider: (done) => done(null, accessToken),
  });
+ const result = await client
+   .api('/search/query')
+   .post({
+     requests: [
+       {
+         entityTypes: ['driveItem'],
+         query: {
+           queryString: query,
+         },
+         from: 0,
+         size: 5,
+       },
+     ],
+   });
  const hits =
-   res.data?.value?.[0]?.hitsContainers?.[0]?.hits || [];
- return hits.map(h => ({
-   name: h.resource.name,
-   webUrl: h.resource.webUrl
+   result.value?.[0]?.hitsContainers?.[0]?.hits || [];
+ return hits.map((h) => ({
+   title: h.resource.name,
+   url: h.resource.webUrl,
+   summary: h.resource.name,
  }));
 }
 module.exports = {
- searchSharePoint
+ searchSharePoint,
 };

@@ -1,45 +1,37 @@
-const { ActivityHandler, CardFactory } = require('botbuilder');
-const { searchSharePoint } = require('./graph/sharepointSearch');
-const { getGraphToken } = require('./graph/token');
-const { processFiles } = require('./graph/fileProcessor');
-const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
+const { ActivityHandler } = require("botbuilder");
+const { getGraphToken } = require("./graph/token");
+const { searchSharePoint } = require("./graph/sharepointSearch");
 class ZAGBot extends ActivityHandler {
  constructor() {
    super();
    this.onMessage(async (context, next) => {
      try {
-       const question = (context.activity.text || '').trim();
+       const question = (context.activity.text || "").trim();
        if (!question) return;
-       await context.sendActivity('🔍 Баримт хайж байна…');
+       await context.sendActivity("🔍 SharePoint-оос хайж байна...");
        const accessToken = await getGraphToken();
        const files = await searchSharePoint(question, accessToken);
        if (!files.length) {
-         await context.sendActivity('❌ Тохирох баримт олдсонгүй.');
+         await context.sendActivity("❌ Холбогдох баримт олдсонгүй.");
          return;
        }
-       const { extractedTextMap, ocrUsed } =
-         await processFiles(files, accessToken);
-       const response = buildCopilotResponse({
-         question,
-         files,
-         extractedTextMap,
-         ocrUsed
+       let reply = "📄 Олдсон баримтууд:\n\n";
+       files.forEach(f => {
+         reply += `• ${f.name}\n${f.url}\n\n`;
        });
-       await context.sendActivity({
-         attachments: [CardFactory.adaptiveCard(response.adaptiveCard)]
-       });
-       await next();
+       await context.sendActivity(reply);
      } catch (err) {
-       console.error('BOT ERROR:', err);
-       await context.sendActivity('❌ Алдаа гарлаа.');
+       console.error("BOT ERROR:", err);
+       await context.sendActivity("❌ Алдаа гарлаа. Log-ийг шалгана уу.");
      }
+     await next();
    });
    this.onMembersAdded(async (context) => {
      await context.sendActivity(
-       '👋 Сайн байна уу!\n\n' +
-       '• SharePoint баримтаас хайна\n' +
-       '• Scanned PDF → Монгол OCR\n' +
-       '• Процесс → BPMN гаргана\n'
+       "👋 Сайн байна уу!\n\n" +
+       "• SharePoint баримт хайна\n" +
+       "• Scanned PDF OCR уншина\n" +
+       "• Copilot маягийн хариу өгнө"
      );
    });
  }

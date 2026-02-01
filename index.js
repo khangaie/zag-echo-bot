@@ -1,38 +1,40 @@
+require('dotenv').config();
 const express = require('express');
 const { BotFrameworkAdapter } = require('botbuilder');
-// ==================
-// Adapter
-// ==================
+/**
+* Adapter
+*/
 const adapter = new BotFrameworkAdapter({
-   appId: process.env.MicrosoftAppId,
-   appPassword: process.env.MicrosoftAppPassword
+ appId: process.env.MicrosoftAppId,
+ appPassword: process.env.MicrosoftAppPassword
 });
-// Global error handler
+/**
+* Global error handler
+*/
 adapter.onTurnError = async (context, error) => {
-   console.error('Bot error:', error);
-   await context.sendActivity('⚠️ Bot дээр алдаа гарлаа.');
+ console.error('❌ Bot error:', error);
+ await context.sendActivity('⚠️ Bot дээр алдаа гарлаа. Админд мэдэгдлээ.');
 };
-// ==================
-// Bot logic (test)
-// ==================
+/**
+* Bot logic
+*/
 const botLogic = async (context) => {
-   if (context.activity.type === 'message') {
-       await context.sendActivity(`Та бичсэн: ${context.activity.text}`);
-   }
+ if (context.activity.type === 'message') {
+   await context.sendActivity(`🧠 Та бичсэн: ${context.activity.text}`);
+ }
 };
-// ==================
-// Express app
-// ==================
+/**
+* Express app
+*/
 const app = express();
 app.use(express.json());
-// 🔴 ЭНД л чиний алдаа байсан
-app.post('/api/messages', async (req, res) => {
-   await adapter.process(req, res, botLogic);
+app.post('/api/messages', (req, res) => {
+ adapter.processActivity(req, res, botLogic);
 });
-// ==================
-// Start server
-// ==================
-const port = process.env.PORT || 3978;
+/**
+* Start server
+*/
+const port = process.env.PORT || 8080;
 app.listen(port, () => {
-   console.log(`✅ Bot is running on port ${port}`);
+ console.log(`✅ Bot is running on port ${port}`);
 });

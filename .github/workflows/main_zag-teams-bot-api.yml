@@ -1,33 +1,26 @@
 name: Build and Deploy to Azure Web App
-
 on:
-  push:
-    branches:
-      - main
-
+ push:
+   branches:
+     - main
 jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # 👉 ЭНД node тохируулна
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      # 👉 ЭНД npm install хийнэ (хамгийн чухал)
-      - name: Install dependencies
-        run: npm install
-
-      # 👉 ЭНД Azure руу deploy хийнэ
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: zag-teams-bot-api
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: .
-
+ build-and-deploy:
+   runs-on: ubuntu-latest
+   steps:
+     - name: Checkout code
+       uses: actions/checkout@v4
+     - name: Setup Node.js
+       uses: actions/setup-node@v4
+       with:
+         node-version: 20
+     # 🔴 ЭНЭ ХАМГИЙН ЧУХАЛ
+     - name: Install dependencies
+       run: npm install
+     - name: Build (optional)
+       run: echo "No build step"
+     - name: Deploy to Azure Web App
+       uses: azure/webapps-deploy@v2
+       with:
+         app-name: zag-teams-bot-api
+         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+         package: .

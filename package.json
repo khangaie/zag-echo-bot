@@ -12,11 +12,10 @@
  },
  "dependencies": {
    "express": "^4.19.2",
+   "axios": "^1.6.8",
    "botbuilder": "^4.23.1",
    "@microsoft/microsoft-graph-client": "^3.0.7",
-   "@azure/identity": "^4.2.1",
-   "@azure/ai-form-recognizer": "^5.1.0",
-   "pdf-parse": "^1.1.1",
+   "@azure/msal-node": "^2.14.2",
    "dotenv": "^16.4.5"
  }
 }

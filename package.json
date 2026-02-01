@@ -1,25 +1,22 @@
 {
-  "name": "zag-echo-bot",
-  "version": "1.0.0",
-  "description": "ZAG Teams AI Bot with SharePoint search, OCR and Copilot-style summary",
-  "main": "index.js",
-  "type": "commonjs",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "dependencies": {
-    "botbuilder": "^4.23.1",
-    "restify": "^11.1.0",
-
-    "@microsoft/microsoft-graph-client": "^3.0.7",
-    "@azure/identity": "^4.2.1",
-
-    "@azure/ai-form-recognizer": "^5.1.0",
-
-    "pdf-parse": "^1.1.1",
-    "dotenv": "^16.4.5"
-  }
+ "name": "zag-echo-bot",
+ "version": "1.0.0",
+ "description": "ZAG Teams AI Bot with SharePoint search and OCR",
+ "main": "index.js",
+ "type": "commonjs",
+ "scripts": {
+   "start": "node index.js"
+ },
+ "engines": {
+   "node": ">=20"
+ },
+ "dependencies": {
+   "express": "^4.19.2",
+   "botbuilder": "^4.23.1",
+   "@microsoft/microsoft-graph-client": "^3.0.7",
+   "@azure/identity": "^4.2.1",
+   "@azure/ai-form-recognizer": "^5.1.0",
+   "pdf-parse": "^1.1.1",
+   "dotenv": "^16.4.5"
+ }
 }

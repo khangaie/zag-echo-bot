@@ -3,10 +3,10 @@ const { BotFrameworkAdapter } = require("botbuilder");
 const ZAGBot = require("./bot");
 const adapter = new BotFrameworkAdapter({
  appId: process.env.MicrosoftAppId,
- appPassword: process.env.MicrosoftAppPassword,
- tenantId: process.env.MicrosoftAppTenantId,
- appType: "SingleTenant",
- oauthScope: process.env.MicrosoftAppOAuthScope
+ appPassword: process.env.MicrosoftAppPassword
+ // ❌ tenantId
+ // ❌ appType
+ // ❌ oauthScope
 });
 adapter.onTurnError = async (context, error) => {
  console.error("ADAPTER ERROR:", error);

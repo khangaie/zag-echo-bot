@@ -3,7 +3,10 @@ const { BotFrameworkAdapter } = require("botbuilder");
 const ZAGBot = require("./bot");
 const adapter = new BotFrameworkAdapter({
  appId: process.env.MicrosoftAppId,
- appPassword: process.env.MicrosoftAppPassword
+ appPassword: process.env.MicrosoftAppPassword,
+ tenantId: process.env.MicrosoftAppTenantId,
+ appType: "SingleTenant",
+ oauthScope: process.env.MicrosoftAppOAuthScope
 });
 adapter.onTurnError = async (context, error) => {
  console.error("ADAPTER ERROR:", error);
@@ -12,7 +15,7 @@ adapter.onTurnError = async (context, error) => {
 const bot = new ZAGBot();
 const app = express();
 app.use(express.json());
-app.get("/", (_, res) => {
+app.get("/", (req, res) => {
  res.send("✅ ZAG Teams Bot is running");
 });
 app.post("/api/messages", (req, res) => {

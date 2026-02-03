@@ -6,10 +6,10 @@ const {
   createBotFrameworkAuthenticationFromConfiguration,
 } = require('botbuilder');
 
-// 1) Танай бот классыг импортлоно (дор байгаа bot.js–ийн классын нэр ZAGBot)
-const { ZAGBot } = require('./bot');
+// ⚠️ IMPORT: bot.js нь default export (module.exports = ZAGBot;) тул энэ хэлбэрээр авна.
+const ZAGBot = require('./bot');
 
-// 2) Credentials (Single‑tenant тохиргоо)
+// ---- Credentials (Single-tenant) ----
 const credentialsFactory = new ConfigurationServiceClientCredentialFactory({
   MicrosoftAppId: process.env.MicrosoftAppId,
   MicrosoftAppPassword: process.env.MicrosoftAppPassword,
@@ -17,17 +17,17 @@ const credentialsFactory = new ConfigurationServiceClientCredentialFactory({
   MicrosoftAppType: 'SingleTenant',
 });
 
-// 3) Bot Framework Authentication + CloudAdapter
+// ---- Bot Framework Authentication + CloudAdapter ----
 const bfa = createBotFrameworkAuthenticationFromConfiguration(null, credentialsFactory);
 const adapter = new CloudAdapter(bfa);
 
-// (заавал биш) Алдаа баригч – лог дээр шалтгааныг тод харуулах
+// (optional) Алдаа баригч – лог дээр шалтгааныг тод харуулна
 adapter.onTurnError = async (context, error) => {
   console.error('onTurnError:', error);
   await context.sendActivity('❌ Алдаа гарлаа. Дараа дахин оролдоно уу.');
 };
 
-// 4) Экспресс апп
+// ---- Express app ----
 const app = express();
 app.use(express.json());
 
@@ -45,7 +45,7 @@ app.post('/api/messages', (req, res) => {
   });
 });
 
-// 5) Start
+// Start
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`🚀 Bot running on ${port}`));
 ``

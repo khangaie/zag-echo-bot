@@ -1,8 +1,7 @@
 // bot.js
 const { ActivityHandler } = require('botbuilder');
 
-// Танай туслах модуль – нэршлийг зурагтай нь таарууллаа.
-// Эдгээр файлууд танай репод байгаа гэдгийг урьдчилан үзсэн (graphToken.js, sharepointSearch.js)
+// Танай туслах модуль – зурагт байсан нэршлүүдтэй тааруулж байна.
 const { getGraphToken } = require('./graphToken');
 const { searchSharePoint } = require('./graph/sharepointSearch');
 
@@ -10,7 +9,7 @@ class ZAGBot extends ActivityHandler {
   constructor() {
     super();
 
-    // Хэрэглэгч мессеж бичих болгонд SharePoint хайлт хийж хариулах
+    // Хэрэглэгч мессеж бичих бүрт SharePoint хайлт хийж хариулах
     this.onMessage(async (context, next) => {
       try {
         const question = (context.activity.text || '').trim();
@@ -23,7 +22,7 @@ class ZAGBot extends ActivityHandler {
 
         await context.sendActivity('🔎 SharePoint баримт хайж байна...');
 
-        // 1) Graph access token
+        // 1) Microsoft Graph access token
         const accessToken = await getGraphToken();
 
         // 2) SharePoint хайлт
@@ -35,11 +34,12 @@ class ZAGBot extends ActivityHandler {
           return;
         }
 
-        // 3) Хариуг форматлах
+        // 3) Хариуг форматлах (танай searchSharePoint-ийн буцаадаг талбарт тааруул)
         let reply = '📄 **Олдсон баримтууд:**\n\n';
         files.forEach((f, i) => {
-          // f.name, f.url гэж буцдаг гэж таамаглаж байна — танай searchSharePoint‑ийн буцаах талбартай тааруулна уу
-          reply += `${i + 1}. ${f.name}\n${f.url}\n\n`;
+          const name = f.name || f.title || 'Unnamed';
+          const url  = f.url  || f.link  || '';
+          reply += `${i + 1}. ${name}\n${url}\n\n`;
         });
 
         await context.sendActivity(reply);
@@ -57,7 +57,7 @@ class ZAGBot extends ActivityHandler {
         [
           'Сайн байна уу! 👋',
           'Надад дараах байдлаар бичээд туршаарай:',
-          '• "Саравч байгуулах норм хая" гэх мэт',
+          '• "Саравч байгуулах норм хай"',
           '• "SharePoint баримт хайж өг"',
           '• "PDF / OCR баримт унш" (хэрэв дэмжсэн бол)',
           '→ Ай харуулъя 🔍',
@@ -68,4 +68,6 @@ class ZAGBot extends ActivityHandler {
   }
 }
 
-module.exports = { ZAGBot };
+// ⚠️ DEFAULT EXPORT (index.js дээр `const ZAGBot = require("./bot")` гэж авна)
+module.exports = ZAGBot;
+``

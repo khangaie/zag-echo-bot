@@ -7,9 +7,6 @@ const ZAGBot = require("./bot");
 const adapter = new BotFrameworkAdapter({
  appId: process.env.MicrosoftAppId,
  appPassword: process.env.MicrosoftAppPassword,
- // 🔑 IMPORTANT (401 error fix)
- channelService: process.env.ChannelService,
- openIdMetadata: process.env.BotOpenIdMetadata,
 });
 // Global error handler
 adapter.onTurnError = async (context, error) => {

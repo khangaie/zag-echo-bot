@@ -3,10 +3,9 @@ on:
  push:
    branches:
      - main
-concurrency: 
-group: deploy-main
-cancel-in-progress: true
-
+concurrency:
+ group: deploy-main
+ cancel-in-progress: true
 jobs:
  build-and-deploy:
    runs-on: ubuntu-latest
@@ -25,4 +24,3 @@ jobs:
          app-name: zag-shine-bot-api
          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
          package: .
-

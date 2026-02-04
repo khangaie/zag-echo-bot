@@ -1,9 +1,10 @@
 const { ActivityHandler, CardFactory } = require('botbuilder');
 
-const { getGraphToken } = require('./token');               // ✅ зөв зам
-const { searchSharePoint } = require('./sharepointSearch'); // Graph Search API
-const { processFiles } = require('./fileProcessor');        // (сонголттой) OCR
-const { buildCopilotResponse } = require('./copilotResponseBuilder');
+// ✅ ЗӨВ ЗАМУУД + named export-ууд
+const { getGraphToken } = require('./graph/token');
+const { searchSharePoint } = require('./graph/sharepointSearch');
+const { processFiles } = require('./graph/fileProcessor');
+const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
 
 class ZAGBot extends ActivityHandler {
   constructor() {
@@ -13,23 +14,26 @@ class ZAGBot extends ActivityHandler {
       try {
         const question = (context.activity.text || '').trim();
         if (!question) {
-          await context.sendActivity('❓ Асуултаа бичнэ үү.');
+          await context.sendActivity('❔ Асуултаа бичнэ үү.');
           return await next();
         }
 
-        await context.sendActivity('🔎 SharePoint баримт хайж байна...');
+        await context.sendActivity('🔎 SharePoint баримт хайж байна…');
 
+        // 1) Graph token
         const accessToken = await getGraphToken();
-        const spFiles = await searchSharePoint(question, accessToken); // [{name,url}...]
 
+        // 2) SharePoint search
+        const spFiles = await searchSharePoint(question, accessToken); // [{ name, url }]
         if (!spFiles || spFiles.length === 0) {
-          await context.sendActivity('❌ Холбогдох баримт олдсонгүй.');
+          await context.sendActivity('❌ Хамаарах баримт олдсонгүй.');
           return await next();
         }
 
+        // 3) Файл боловсруулалт (OCR/parse)
         const filesForProcessing = spFiles.map(f => ({
-          fileName: f.name || f.fileName || 'file',
-          url: f.url
+          filename: f.name || f.filename || 'file',
+          url: f.url,
         }));
 
         let extractedTextMap = {};
@@ -42,36 +46,25 @@ class ZAGBot extends ActivityHandler {
           console.warn('processFiles warning:', e.message);
         }
 
+        // 4) Хариу бүтээх (Adaptive Card)
         const payload = buildCopilotResponse({
           question,
           files: spFiles,
           extractedTextMap,
-          ocrUsed
+          ocrUsed,
         });
 
         await context.sendActivity({
-          attachments: [CardFactory.adaptiveCard(payload.adaptiveCard)]
+          attachments: [CardFactory.adaptiveCard(payload.adaptiveCard)],
         });
-
       } catch (err) {
-        console.error('BOT ERROR:', err);
-        await context.sendActivity('⚠️ Алдаа гарлаа. Log stream-ийг шалгана уу.');
+        console.error('Bot onMessage error:', err);
+        await context.sendActivity('⚠️ Дотоод алдаа гарлаа.');
       }
-      await next();
-    });
 
-    this.onMembersAdded(async (context, next) => {
-      await context.sendActivity([
-        'Сайн байна уу! 👋',
-        'Надад дараах байдлаар бичээд туршаарай:',
-        '• "Саравч байгуулах норм хай"',
-        '• "SharePoint баримт хайж өг"',
-        '• "PDF / OCR баримт унш" (хэрэв дэмжсэн бол)',
-        '→ Ай харуулъя 🔍'
-      ].join('\n'));
       await next();
     });
   }
 }
 
-module.exports = ZAGBot; // ✅ default export
+module.exports = ZAGBot;

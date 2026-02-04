@@ -1,6 +1,6 @@
 const { ActivityHandler, CardFactory } = require('botbuilder');
 const { searchSharePoint } = require('./graph/sharepointSearch');
-const { getGraphToken } = require('./graph/tokens');   // <-- танай токен авах файл
+const { getGraphToken } = require('./graph/token');   // <-- танай токен авах файл
 
 class ZAGBot extends ActivityHandler {
   constructor() {

@@ -12,13 +12,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ⛔ cache: 'npm' АШИГЛАХГҮЙ (lock файлаа эхлээд CI дээр үүсгэнэ)
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '20.x'        # ⛔ cache ашиглахгүй (анхны билдүүдэд lock байхгүй байж болно)
 
-      # 🔹 Lock файл байхгүй бол CI дээр үүсгэнэ; байвал алгасна
+      # Lock файл байхгүй бол CI дээр үүсгэнэ; байвал алгасна
       - name: Ensure package-lock.json exists
         run: |
           if [ ! -f package-lock.json ]; then
@@ -28,15 +27,19 @@ jobs:
             echo "package-lock.json already exists."
           fi
 
-      # 🔹 Reproducible install
+      # CI дээр бүрэн суулгана (prod only)
       - name: Install dependencies (CI)
         run: npm ci --omit=dev
 
-      # (шаардлагатай бол test/lint алхмууд энд)
+      # ZIP артефакт (⚠️ node_modules-ийг БҮҮ хас)
+      - name: Create deployment artifact (zip with node_modules)
+        run: |
+          zip -r release.zip . -x ".git/*" ".github/*"
 
-      - name: Deploy to Azure Web App
+      - name: Deploy to Azure Web App (ZIP Deploy)
         uses: azure/webapps-deploy@v2
         with:
-          app-name: 'zag-shine-bot-api'                         # Azure Portal → Overview дээрх яг нэр
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}  # Portal → Get publish profile → энэ нэртэй secret
-          package: '.'                                          # Oryx сервер талд build хийж node_modules бэлдэнэ
+          app-name: 'zag-shine-bot-api'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: './release.zip'
+``

@@ -1,65 +1,34 @@
 const { ActivityHandler, CardFactory } = require('botbuilder');
-
-// ✅ ЗӨВ ЗАМУУД + named export-ууд
-const { getGraphToken } = require('./graph/token');
-const { searchSharePoint } = require('./graph/sharepointSearch');
-const { processFiles } = require('./graph/fileProcessor');
-const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
+const { searchSharePoint } = require('./graph/sharepointSearch'); // файл нэрээ тааруул
 
 class ZAGBot extends ActivityHandler {
   constructor() {
     super();
 
     this.onMessage(async (context, next) => {
+      const question = (context.activity.text || '').trim();
+      if (!question) {
+        await context.sendActivity('❓ Асуултаа бичнэ үү.');
+        return await next();
+      }
+
+      await context.sendActivity('🔎 SharePoint баримт хайж байна…');
+
       try {
-        const question = (context.activity.text || '').trim();
-        if (!question) {
-          await context.sendActivity('❔ Асуултаа бичнэ үү.');
-          return await next();
-        }
+        const accessToken = await getGraphToken(); // танай токен олж авах функц
+        const spFiles = await searchSharePoint(question, accessToken);
 
-        await context.sendActivity('🔎 SharePoint баримт хайж байна…');
-
-        // 1) Graph token
-        const accessToken = await getGraphToken();
-
-        // 2) SharePoint search
-        const spFiles = await searchSharePoint(question, accessToken); // [{ name, url }]
         if (!spFiles || spFiles.length === 0) {
-          await context.sendActivity('❌ Хамаарах баримт олдсонгүй.');
+          await context.sendActivity('⚠️ Хайлтаар баримт олдсонгүй.');
           return await next();
         }
 
-        // 3) Файл боловсруулалт (OCR/parse)
-        const filesForProcessing = spFiles.map(f => ({
-          filename: f.name || f.filename || 'file',
-          url: f.url,
-        }));
-
-        let extractedTextMap = {};
-        let ocrUsed = false;
-        try {
-          const processed = await processFiles(filesForProcessing, accessToken);
-          extractedTextMap = processed.extractedTextMap || {};
-          ocrUsed = !!processed.ocrUsed;
-        } catch (e) {
-          console.warn('processFiles warning:', e.message);
-        }
-
-        // 4) Хариу бүтээх (Adaptive Card)
-        const payload = buildCopilotResponse({
-          question,
-          files: spFiles,
-          extractedTextMap,
-          ocrUsed,
-        });
-
-        await context.sendActivity({
-          attachments: [CardFactory.adaptiveCard(payload.adaptiveCard)],
-        });
-      } catch (err) {
-        console.error('Bot onMessage error:', err);
-        await context.sendActivity('⚠️ Дотоод алдаа гарлаа.');
+        // энгийн жагсаалт
+        const lines = spFiles.map((f, i) => `${i + 1}. [${f.name}](${f.webUrl})`).join('\n');
+        await context.sendActivity(lines);
+      } catch (e) {
+        console.error('onMessage error:', e);
+        await context.sendActivity('🚨 Дотоод алдаа гарлаа. Дараа дахин оролдоно уу.');
       }
 
       await next();

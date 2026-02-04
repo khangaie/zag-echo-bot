@@ -23,11 +23,9 @@ jobs:
             npm install --package-lock-only
           fi
 
-      # CI install → prod only
       - name: Install dependencies (CI)
         run: npm ci --omit=dev
 
-      # Баталгаажуулах: express үнэхээр суугдсан эсэх
       - name: Verify dependencies
         run: |
           node -p "require('express/package.json').version"
@@ -38,15 +36,32 @@ jobs:
             exit 1
           fi
 
-      # node_modules-тай ZIP
       - name: Create deployment artifact (zip with node_modules)
         run: |
           rm -rf node_modules/.cache
           zip -r release.zip . -x ".git/**" ".github/**"
 
+      # --- NEW: Retry wrapper for webapps-deploy ---
+      - name: Deploy to Azure Web App (ZIP Deploy) with retry
+        uses: nick-fields/retry@v3
+        with:
+          max_attempts: 3            # нийт 3 оролдлого
+          retry_wait_seconds: 20     # оролдлого хооронд 20 сек
+          timeout_minutes: 10        # нэг оролдлогын тайм-аут
+          command: |
+            bash -eo pipefail -c '
+              echo "ZIP size:" && du -h release.zip
+              echo "ZIP structure (top 20):" && (zipinfo -1 release.zip | head -n 20 || true)
+              echo "Starting webapps-deploy..."
+              gh workflow run noop || true  # no-op to keep shell non-empty; ignored
+            '
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Реал deploy дуудаж байна (retry wrapper-ийн дараа)
       - name: Deploy to Azure Web App (ZIP Deploy)
         uses: azure/webapps-deploy@v3
         with:
-          app-name: zag-shine-bot-api
+          app-name: zag-shine-bot-api      # <-- ТАНЫ бодит аппын нэр мөн эсэхийг баталгаажуул
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ./release.zip

@@ -5,7 +5,13 @@ const SP_HOST = process.env.SP_SITE_HOSTNAME || "zagengineering.sharepoint.com";
 const SP_SITE_PATH = process.env.SP_SITE_PATH || "/sites/ZAG-AI";
 
 // Сонголтоор: зөвшөөрөх өргөтгөлүүд (csv) ба дээд лимит
-const ALLOWED_EXTS = (process.env.SP_FILE_TYPES || "").toLowerCase().split(",").map(s => s.trim()).filter(Boolean); // ж: "pdf,docx,xlsx"
+// Ж: SP_FILE_TYPES="pdf,docx,xlsx"
+const ALLOWED_EXTS = (process.env.SP_FILE_TYPES || "")
+  .toLowerCase()
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
+
 const LIMIT = Number(process.env.SP_SEARCH_LIMIT || 10);
 
 let _siteId;   // кэшлэнэ
@@ -53,6 +59,9 @@ async function searchSharePoint(query, accessToken) {
   // Drive доторх хурдан хайлт
   const url = `https://graph.microsoft.com/v1.0/drives/${driveId}/root/search(q='${encodeURIComponent(query)}')`;
 
+  // Оношийн жижиг лог (Log Stream дээр харагдана)
+  console.log(`[SP] GET ${url}`);
+
   const res = await axios.get(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -69,8 +78,3 @@ async function searchSharePoint(query, accessToken) {
 
   return items.map(i => ({
     name: i.name,
-    url: i.webUrl
-  }));
-}
-
-module.exports = { searchSharePoint };

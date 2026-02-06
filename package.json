@@ -9,7 +9,7 @@
     "ingest:all": "node scripts/ingestSharePointToSearch.js --folders=CONTRACT-AI,HR-AI,HSE-AI,PROCESS-AI,PROJECT-AI --ext=pdf --max=200"
   },
   "engines": {
-    "node": ">=20.x"
+    "node": "20.x"
   },
   "dependencies": {
     "express": "^4.18.2",

@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+
+    "ingest:process": "node scripts/ingestSharePointToSearch.js --folders=PROCESS-AI --ext=pdf --max=100",
+    "ingest:all": "node scripts/ingestSharePointToSearch.js --folders=CONTRACT-AI,HR-AI,HSE-AI,PROCESS-AI,PROJECT-AI --ext=pdf --max=200"
   },
   "engines": {
     "node": ">=20.x"

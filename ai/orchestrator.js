@@ -3,45 +3,63 @@ const { retrievePassages } = require('../graph/aiSearch');
 const { searchSharePoint } = require('../graph/sharepointSearch');
 const { getGraphToken } = require('../graph/token');
 const { askAI } = require('../graph/askAI');
+const { processFiles } = require('../graph/fileProcessor');
 
-// simple uniq by key
 const uniqBy = (arr, key) =>
   Array.from(new Map((arr || []).map(x => [key(x), x])).values());
 
-/**
- * End-to-end orchestrator:
- * 1) Azure AI Search-аас (BM25/semantic таны одоогийн хувилбар) хэсэглэлүүдийг авна
- * 2) SharePoint Graph search-аас файлууд (id+driveId-тэй) авч ирнэ
- * 3) Нэгтгээд askAI() руу дамжуулж Copilot-Шиг хариултыг бэлдэнэ
- *
- * NOTE: Хэрэв runtime OCR хэрэгтэй бол дараа нь processFiles() дуудаж болно.
- */
 async function answerQuestion(question) {
   // 1) AI Search
   const aiSnippets = await retrievePassages(question, 6);
 
-  // 2) SharePoint search (Graph)
+  // 2) SharePoint search
   const token = await getGraphToken();
   const spFiles = await searchSharePoint(question, token);
 
-  // 3) SP файлуудыг id+driveId-тэйгээр зөв дамжуулах (403-оос зайлсхийхэд ЧУХАЛ)
+  // 3) SharePoint files must include id + driveId
   const spRefs = (spFiles || []).map(f => ({
-    id: f.id,                    // <-- Graph /content таталтад хэрэгтэй
-    driveId: f.driveId,          // <-- Graph /content таталтад хэрэгтэй
+    id: f.id,
+    driveId: f.driveId,
     fileName: f.name,
     url: f.webUrl,
-    content: ''                  // runtime OCR хийж дүүргэж болно
+    content: ''
   }));
 
-  // 4) Нэгтгэж top 8 авна (давхардалгүй)
-  const docs = uniqBy([...(aiSnippets || []), ...spRefs], d => d.url || d.fileName)
-                 .slice(0, 8);
+  // 4) Merge
+  let docs = uniqBy(
+    [...(aiSnippets || []), ...spRefs],
+    d => d.url || d.fileName
+  ).slice(0, 5);
 
-  // 5) AI-аас structured хариулт
+  // 5) PDFs selected for OCR
+  const pdfTargets = docs
+    .filter(d => d.fileName && d.fileName.toLowerCase().endsWith('.pdf'))
+    .map(d => ({
+      id: d.id,
+      driveId: d.driveId,
+      name: d.fileName,
+      webUrl: d.url
+    }));
+
+  let extractedTextMap = {};
+  let ocrUsed = false;
+
+  if (pdfTargets.length > 0) {
+    const r = await processFiles(pdfTargets, token);
+    extractedTextMap = r.extractedTextMap;
+    ocrUsed = r.ocrUsed;
+
+    // merge OCR text back into docs
+    docs = docs.map(d => ({
+      ...d,
+      content: extractedTextMap[d.fileName] || d.content
+    }));
+  }
+
+  // 6) AI structured answer
   const ans = await askAI(question, docs);
 
-  // таны одоогийн bot.js { ans, docs }-ыг хэрэглэж байгаа тул энэ бүтэц хэвээр
-  return { ans, docs };
+  return { ans, docs, extractedTextMap, ocrUsed };
 }
 
 module.exports = { answerQuestion };

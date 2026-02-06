@@ -3,81 +3,45 @@ const { retrievePassages } = require('../graph/aiSearch');
 const { searchSharePoint } = require('../graph/sharepointSearch');
 const { getGraphToken } = require('../graph/token');
 const { askAI } = require('../graph/askAI');
-const { processFiles } = require('../graph/fileProcessor');
 
-const uniqBy = (arr, key) => Array.from(new Map((arr || []).map(x => [key(x), x])).values());
+// simple uniq by key
+const uniqBy = (arr, key) =>
+  Array.from(new Map((arr || []).map(x => [key(x), x])).values());
 
-// энгийн нэр-адилсын оноо (диакритикгүй, lower-case)
-function scoreByTitle(query, name) {
-  const q = String(query).toLowerCase();
-  const n = String(name || '').toLowerCase();
-  let s = 0;
-  ['гэрээ', 'байгуулах', 'процесс', 'гэрээ байгуулах'].forEach(w => { if (q.includes(w) && n.includes(w)) s += 2; });
-  // яг “гэрээ байгуулах процесс” орсон бол илүү оноо
-  if (n.includes('гэрээ байгуулах') && n.includes('процесс')) s += 4;
-  // яг бүрэн таарах эсвэл ихэнх хэсэг нь таарах
-  if (n.includes(q)) s += 3;
-  return s;
-}
-
-function pickBestPdfByTitle(question, spFiles = []) {
-  const pdfs = (spFiles || []).filter(f => {
-    const name = (f.name || f.fileName || '').toLowerCase();
-    return name.endsWith('.pdf') || (f.fileType === 'pdf');
-  });
-  if (pdfs.length === 0) return null;
-  const sorted = pdfs
-    .map(f => ({ f, s: scoreByTitle(question, f.name || f.fileName) }))
-    .sort((a, b) => b.s - a.s);
-  return sorted[0]?.f || null;
-}
-
+/**
+ * End-to-end orchestrator:
+ * 1) Azure AI Search-аас (BM25/semantic таны одоогийн хувилбар) хэсэглэлүүдийг авна
+ * 2) SharePoint Graph search-аас файлууд (id+driveId-тэй) авч ирнэ
+ * 3) Нэгтгээд askAI() руу дамжуулж Copilot-Шиг хариултыг бэлдэнэ
+ *
+ * NOTE: Хэрэв runtime OCR хэрэгтэй бол дараа нь processFiles() дуудаж болно.
+ */
 async function answerQuestion(question) {
-  // 1) AI Search (optional) + 2) SharePoint
+  // 1) AI Search
   const aiSnippets = await retrievePassages(question, 6);
+
+  // 2) SharePoint search (Graph)
   const token = await getGraphToken();
   const spFiles = await searchSharePoint(question, token);
 
-  // 3) Нэр таарсан PDF-ээ илүүцгүй OCR-лож documents-д контенттойгоор оруулах
-  const chosen = pickBestPdfByTitle(question, spFiles);
-  let docs = [];
-  let extractedTextMap = {};
-  let ocrUsed = false;
+  // 3) SP файлуудыг id+driveId-тэйгээр зөв дамжуулах (403-оос зайлсхийхэд ЧУХАЛ)
+  const spRefs = (spFiles || []).map(f => ({
+    id: f.id,                    // <-- Graph /content таталтад хэрэгтэй
+    driveId: f.driveId,          // <-- Graph /content таталтад хэрэгтэй
+    fileName: f.name,
+    url: f.webUrl,
+    content: ''                  // runtime OCR хийж дүүргэж болно
+  }));
 
-  if (chosen) {
-    // OCR run
-    const { extractedTextMap: m, ocrUsed: used } = await processFiles(
-      [{
-        id: chosen.id,
-        driveId: chosen.driveId, // sharepointSearch.js аль хэдийн өгдөг
-        name: chosen.name,
-        webUrl: chosen.webUrl
-      }],
-      token
-    );
-    extractedTextMap = m || {};
-    ocrUsed = !!used;
+  // 4) Нэгтгэж top 8 авна (давхардалгүй)
+  const docs = uniqBy([...(aiSnippets || []), ...spRefs], d => d.url || d.fileName)
+                 .slice(0, 8);
 
-    const content = extractedTextMap[chosen.name] || '';
-    docs = [{
-      fileName: chosen.name,
-      url: chosen.webUrl,
-      content,
-      driveId: chosen.driveId
-    }];
-  } else {
-    // OCR хийх сонголтгүй бол урьдын адил refs + AI snippets-ийг нэгтгэнэ
-    const spRefs = (spFiles || []).map(f => ({
-      fileName: f.name,
-      url: f.webUrl,
-      content: '',
-      driveId: f.driveId
-    }));
-    docs = uniqBy([...(aiSnippets || []), ...spRefs], d => d.url || d.fileName).slice(0, 8);
-  }
-
+  // 5) AI-аас structured хариулт
   const ans = await askAI(question, docs);
-  return { ans, docs, extractedTextMap, ocrUsed };
+
+  // таны одоогийн bot.js { ans, docs }-ыг хэрэглэж байгаа тул энэ бүтэц хэвээр
+  return { ans, docs };
 }
 
 module.exports = { answerQuestion };

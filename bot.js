@@ -3,7 +3,7 @@ const { ActivityHandler } = require('botbuilder');
 const { searchSharePoint } = require('./graph/sharepointSearch');
 const { getGraphToken } = require('./graph/token');
 
-// Feature flag: ENV байхгүй үед унтраалт
+// Feature flag
 const FEATURE_RAG_CARD = (process.env.FEATURE_RAG_CARD || '0') === '1';
 
 class ZAGBot extends ActivityHandler {
@@ -14,7 +14,7 @@ class ZAGBot extends ActivityHandler {
       const welcome =
         "👋 Сайн байна уу?\n\n" +
         "Би **Заг Инженеринг ХХК**‑ийн хиймэл оюун ухааны туслах бот байна.\n" +
-        "📚 Манай байгууллагын SharePoint мэдлэгийн сангаас хайлт хийж, танд шаардлагатай мэдээллийг олж өгнө.\n\n" +
+        "📚 SharePoint мэдлэгийн сангаас хайлт хийж, танд шаардлагатай мэдээллийг олж өгдөг.\n\n" +
         "Та асуултаа бичээрэй 😊";
       await context.sendActivity(welcome);
       await next();
@@ -31,7 +31,6 @@ class ZAGBot extends ActivityHandler {
       await context.sendActivity("🔎 SharePoint баримт хайж байна…");
 
       try {
-        // SharePoint хайлт
         const accessToken = await getGraphToken();
         const spFiles = await searchSharePoint(question, accessToken);
 
@@ -40,29 +39,31 @@ class ZAGBot extends ActivityHandler {
           return await next();
         }
 
-        // --- Хуучин зан төлөв (линк жагсаалт) ---
+        // -------------------------------
+        // Хуучин зан төлөв (линк жагсаалт)
+        // -------------------------------
         if (!FEATURE_RAG_CARD) {
           const lines = spFiles
             .map((f, i) => `${i + 1}. [${f.name}](${f.webUrl || "#"})`)
             .join("\n");
-
           await context.sendActivity(lines);
         }
 
-        // --- Шинэ RAG + Adaptive Card ---
+        // -------------------------------
+        // Шинэ RAG + OCR + Adaptive Card
+        // -------------------------------
         else {
           const { answerQuestion } = require("./ai/orchestrator");
           const { buildCopilotResponse } = require("./ai/copilotResponseBuilder");
 
-          const res = await answerQuestion(question); // { ans, docs }
+          // answerQuestion() = { ans, docs, extractedTextMap, ocrUsed }
+          const res = await answerQuestion(question);
 
           const card = buildCopilotResponse({
             question,
-            extractedTextMap: Object.fromEntries(
-              (res.docs || []).map((d) => [d.fileName, d.content || ""])
-            ),
-            files: res.docs,
-            ocrUsed: false,
+            extractedTextMap: res.extractedTextMap || {},
+            files: res.docs || [],
+            ocrUsed: res.ocrUsed,
             ans: res.ans
           }).adaptiveCard;
 
@@ -70,9 +71,9 @@ class ZAGBot extends ActivityHandler {
             attachments: [
               {
                 contentType: "application/vnd.microsoft.card.adaptive",
-                content: card,
-              },
-            ],
+                content: card
+              }
+            ]
           });
         }
 

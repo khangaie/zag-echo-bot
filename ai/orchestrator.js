@@ -1,114 +1,99 @@
 // ai/orchestrator.js
 const { retrievePassages } = require('../graph/aiSearch');
-const { searchSharePoint } = require('../graph/sharepointSearch');
+const { searchSharePoint, searchSharePointBroad } = require('../graph/sharepointSearch');
 const { getGraphToken } = require('../graph/token');
 const { askAI } = require('../graph/askAI');
 const { processFiles } = require('../graph/fileProcessor');
 
+const THREAD_CTX = new Map(); // threadId -> { docs, lastQ }
 const uniqBy = (arr, key) =>
   Array.from(new Map((arr || []).map(x => [key(x), x])).values());
 
-/** энгийн keyword score — асуултын түлхүүрүүд хэд давтагдсанаар эрэмбэлнэ */
+function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function scoreDoc(question, content = '') {
   if (!content) return 0;
   const qTokens = (question || '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .split(/\s+/)
-    .filter(t => t.length > 1);
+    .toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/).filter(t => t.length > 1);
   const text = content.toLowerCase();
-  let s = 0;
-  for (const t of qTokens) {
-    const m = text.match(new RegExp(`\\b${escapeRegExp(t)}\\b`, 'g'));
-    s += m ? m.length : 0;
-  }
-  return s;
+  return qTokens.reduce((s, t) => s + (text.match(new RegExp(`\\b${escapeRegExp(t)}\\b`, 'g')) || []).length, 0);
 }
-
-function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** асуулттай холбоотой "фокус" хэсгийг тасдаж авах */
 function focusSnippet(question, content, max = 4000) {
   if (!content) return '';
   const q = (question || '').split(/\s+/).filter(Boolean).slice(0, 6);
-  const idx = q
-    .map(k => content.toLowerCase().indexOf(k.toLowerCase()))
-    .filter(i => i >= 0)
-    .sort((a, b) => a - b)[0] ?? 0;
-  const start = Math.max(0, idx - Math.floor(max / 2));
+  const idx = q.map(k => content.toLowerCase().indexOf(k.toLowerCase()))
+              .filter(i => i >= 0).sort((a,b)=>a-b)[0] ?? 0;
+  const start = Math.max(0, idx - Math.floor(max/2));
   return content.slice(start, start + max);
 }
+function rewriteQuery(question, history = [], pinned = []) {
+  // өнгөрсөн асуулт, өмнөх баримтын нэршлүүдийг query-д шингээнэ
+  const prevQ = [...history].reverse().map(h => h?.text).find(Boolean) || '';
+  const names = (pinned || []).map(d => d.fileName).filter(Boolean).slice(0, 3).join(' ');
+  const joined = [question, prevQ, names].filter(Boolean).join(' ');
+  return joined.length > 400 ? joined.slice(-400) : joined; // Graph query урт хязгаар
+}
 
-async function answerQuestion(question) {
-  // ---------------- 1) AI Search (семантик/эсвэл энгийн) ----------------
+async function answerQuestion(question, { threadId = 'default', history = [] } = {}) {
+  const sticky = THREAD_CTX.get(threadId) || { docs: [], lastQ: '' };
+  const token = await getGraphToken();
+
+  // 1) AI Search
   const aiSnippets = await retrievePassages(question, 6);
   const aiDocs = (aiSnippets || []).map(d => ({
-    id: d.id,
-    driveId: d.driveId,
+    id: d.id, driveId: d.driveId,
     fileName: d.fileName || d.title || 'Source',
     url: d.webUrl || d.url,
-    content: d.content || '' // AI Search өөрөө өгдөг chunk
+    content: d.content || ''
   }));
 
-  // ---------------- 2) SharePoint search (Graph) ----------------
-  const token = await getGraphToken();
-  const spFiles = await searchSharePoint(question, token);
-  // SP илэрцүүдэд контент хоосон тул бүгдийг processFiles-рээр уншина
-  const toProcess = (spFiles || []).map(f => ({
-    id: f.id,
-    driveId: f.driveId,
-    name: f.name,
-    webUrl: f.webUrl
-  }));
+  // 2) SharePoint search — narrow
+  let spFiles = await searchSharePoint(rewriteQuery(question, history, sticky.docs), token);
+  if (!spFiles || spFiles.length === 0) {
+    // 2b) fallback — өргөн Graph Search (/search/query)
+    spFiles = await searchSharePointBroad(rewriteQuery(question, history, sticky.docs), token);
+  }
 
-  let extractedTextMap = {};
-  let ocrUsed = false;
-
+  // 3) Бүх SP илэрцээс текст гаргах
+  const toProcess = (spFiles || []).map(f => ({ id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl }));
+  let extractedTextMap = {}, ocrUsed = false;
   if (toProcess.length > 0) {
-    // processFiles: docx/pdf/pptx/xlsx бүгдийг уншина (танай төслийн fileProcessor.js-тай нийцнэ)
     const r = await processFiles(toProcess, token);
     extractedTextMap = r.extractedTextMap || {};
     ocrUsed = !!r.ocrUsed;
   }
+  const spDocs = (spFiles || []).map(f => ({
+    id: f.id, driveId: f.driveId, fileName: f.name, url: f.webUrl,
+    content: extractedTextMap[f.name] || ''
+  }));
 
-  const spDocs = (spFiles || []).map(f => {
-    const text = extractedTextMap[f.name] || '';
-    return {
-      id: f.id,
-      driveId: f.driveId,
-      fileName: f.name,
-      url: f.webUrl,
-      content: text
-    };
-  });
-
-  // ---------------- 3) Merge + Dedup + Rank ----------------
+  // 4) Merge + Dedup
   let docs = uniqBy([...aiDocs, ...spDocs], d => d.url || d.fileName);
 
-  // контентгүй баримтыг арилгаж, оноогоор эрэмбэлээд TOP-K сонгоно
-  const scored = docs
+  // 5) Rank; контентгүй бол sticky/context fallback
+  const ranked = docs
     .map(d => ({ ...d, _score: scoreDoc(question, d.content) }))
-    .filter(d => (d.content || '').length > 100)   // хоосон/богино текстүүдийг хаяна
-    .sort((a, b) => b._score - a._score);
+    .filter(d => (d.content || '').length > 100)
+    .sort((a,b)=> b._score - a._score);
 
-  const topK = scored.slice(0, 5);
-  // Хэрэв оноо бүгд 0 байвал—AI Search chunks-оо fallback болгон үлдээнэ
-  const topDocs = topK.length ? topK : aiDocs.slice(0, 5);
-
-  // ---------------- 4) Focused extractedTextMap ----------------
-  // processStepExtractor зөв ажиллаж, flowchart "сонин" харагдахгүй байхаар
-  // хамгийн хамааралтай баримтуудын ФОКУС хэсгийг л өгнө.
-  const focusedMap = {};
-  for (const d of topDocs) {
-    focusedMap[d.fileName] = focusSnippet(question, d.content, 4000);
+  let topDocs = ranked.slice(0, 5);
+  if (topDocs.length === 0 && sticky.docs.length) {
+    topDocs = sticky.docs; // өмнөх баримтын хүрээнд хариулна
+  }
+  if (topDocs.length === 0) {
+    topDocs = aiDocs.slice(0, 5); // хамгийн сүүлчийн fallback
   }
 
-  // ---------------- 5) Асуултад баримтаар суурилсан хариу ----------------
+  // 6) Focus map — LLM-д зөвхөн хамааралтай хэсгийг дамжуулна
+  const focusedMap = {};
+  for (const d of topDocs) focusedMap[d.fileName] = focusSnippet(question, d.content, 4000);
+
+  // 7) Хариулт
   const ans = await askAI(question, topDocs);
 
-  // UI-д ашиглах extractedTextMap-ийг focused хувилбараар буцаана
+  // 8) Sticky context хадгална
+  THREAD_CTX.set(threadId, { docs: topDocs, lastQ: question });
+
   return { ans, docs: topDocs, extractedTextMap: focusedMap, ocrUsed };
 }
 

@@ -4,7 +4,6 @@ const axios = require("axios");
 // ENV-ээс уншдаг (байхгүй бол default-оор тохируулна)
 const SP_HOST = process.env.SP_SITE_HOSTNAME || "zagengineering.sharepoint.com";
 const SP_SITE_PATH = process.env.SP_SITE_PATH || "/sites/ZAG-AI";
-
 // Сонголтоор: зөвшөөрөх өргөтгөлүүд (csv) ба дээд лимит
 // Ж: SP_FILE_TYPES="pdf,docx,xlsx"
 const ALLOWED_EXTS = (process.env.SP_FILE_TYPES || "")
@@ -12,15 +11,13 @@ const ALLOWED_EXTS = (process.env.SP_FILE_TYPES || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
-
 const LIMIT = Number(process.env.SP_SEARCH_LIMIT || 10);
 
-let _siteId;   // кэшлэнэ
-let _driveId;  // кэшлэнэ
+let _siteId;  // кэшлэнэ
+let _driveId; // кэшлэнэ
 
 async function getSiteId(accessToken) {
   if (_siteId) return _siteId;
-
   const url = `https://graph.microsoft.com/v1.0/sites/${SP_HOST}:${SP_SITE_PATH}`;
   try {
     const res = await axios.get(url, {
@@ -37,22 +34,17 @@ async function getSiteId(accessToken) {
 
 async function getDriveId(accessToken) {
   if (_driveId) return _driveId;
-
   const siteId = await getSiteId(accessToken);
   const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/drives`;
-
   try {
     const res = await axios.get(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-
     const drives = res.data?.value || [];
     const drive =
       drives.find((d) => d.name === "Documents" || d.name === "Shared Documents") ||
       drives[0];
-
     if (!drive) throw new Error("❌ Энэ сайтын дор drive олдсонгүй.");
-
     _driveId = drive.id;
     return _driveId;
   } catch (err) {
@@ -72,12 +64,9 @@ function hasAllowedExt(name) {
  */
 async function searchSharePoint(query, accessToken) {
   const driveId = await getDriveId(accessToken);
-
   const encodedQ = encodeURIComponent(query);
   const url = `https://graph.microsoft.com/v1.0/drives/${driveId}/root/search(q='${encodedQ}')`;
-
   console.log(`[SP] GET ${url}`);
-
   try {
     const res = await axios.get(url, {
       headers: {
@@ -85,7 +74,6 @@ async function searchSharePoint(query, accessToken) {
         Accept: "application/json",
       },
     });
-
     const items = (res.data?.value || [])
       .filter((i) => i?.name)
       .filter((i) => hasAllowedExt(i.name))

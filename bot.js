@@ -6,7 +6,6 @@ const FEATURE_RAG_CARD = (process.env.FEATURE_RAG_CARD || '0') === '1';
 
 // conversation history хадгалах (follow-up query rewrite хийхэд)
 const historyMap = new Map(); // conversation.id -> [{role,text}]
-
 function pushHistory(convId, role, text) {
   const h = historyMap.get(convId) || [];
   h.push({ role, text });
@@ -17,37 +16,41 @@ class ZAGBot extends ActivityHandler {
   constructor() {
     super();
 
-    // 👋 Welcome message
     this.onMembersAdded(async (context, next) => {
       const welcome =
         "👋 Сайн байна уу?\n\n" +
         "Би **Заг Инженеринг ХХК**‑ийн хиймэл оюун ухааны туслах бот байна.\n" +
-        "📚 SharePoint мэдлэгийн сангаас хайлт хийж, танд шаардлагатай мэдээллийг олж өгдөг.\n\n" +
+        "📚 SharePoint мэдлэгийн сангаас хайлт хийж, баримтад тулгуурлан хариулна.\n\n" +
         "Та асуултаа бичээрэй 😊";
       await context.sendActivity(welcome);
       await next();
     });
 
-    // 💬 Message handler
     this.onMessage(async (context, next) => {
       const question = (context.activity.text || '').trim();
       const convId = context.activity.conversation?.id || 'default';
 
       if (!question) {
         await context.sendActivity('❓ Асуултаа бичнэ үү.');
-        return await next();
+        return next();
       }
 
-      // history-д user асуултаа хадгална
       pushHistory(convId, 'user', question);
 
       try {
-        // ✅ RAG асаалттай бол — оркестратор өөрөө SP+fallback+sticky контекстээр хариулна
         if (FEATURE_RAG_CARD) {
-          await context.sendActivity('🔎 Баримт хайж байна…');
+          await context.sendActivity('🔎 Баримтаас хайж байна…');
 
-          const { answerQuestion } = require('./ai/orchestrator');
-          const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
+          // ✅ Require‑ууд алдахад сервис унахгүй (deploy restart loop тасална)
+          let answerQuestion, buildCopilotResponse;
+          try {
+            ({ answerQuestion } = require('./ai/orchestrator'));
+            ({ buildCopilotResponse } = require('./ai/copilotResponseBuilder'));
+          } catch (e) {
+            console.error('[Require error]', e);
+            await context.sendActivity('⚠️ Server тохиргооны алдаа байна (module load failed).');
+            return next();
+          }
 
           const res = await answerQuestion(question, {
             threadId: convId,
@@ -70,34 +73,18 @@ class ZAGBot extends ActivityHandler {
           });
 
           if (res?.ans?.tldr) pushHistory(convId, 'assistant', res.ans.tldr);
-          return await next();
+          return next();
         }
 
-        // ❎ RAG унтраалттай бол — зөвхөн SP линк жагсаана
-        await context.sendActivity('🔎 SharePoint баримт хайж байна…');
+        // RAG унтраалттай үед (танайд бол асаалттай)
+        await context.sendActivity('ℹ️ RAG унтраалттай байна.');
+        return next();
 
-        const { searchSharePoint } = require('./graph/sharepointSearch');
-        const { getGraphToken } = require('./graph/token');
-
-        const accessToken = await getGraphToken();
-        const spFiles = await searchSharePoint(question, accessToken);
-
-        if (!spFiles || spFiles.length === 0) {
-          await context.sendActivity('⚠️ Хайлтаар баримт олдсонгүй.');
-          return await next();
-        }
-
-        const lines = spFiles
-          .map((f, i) => `${i + 1}. ${f.webUrl || '#'}`)
-          .join('\n');
-
-        await context.sendActivity(lines);
       } catch (e) {
-        console.error('onMessage error:', e);
+        console.error('[onMessage error]', e);
         await context.sendActivity('🚨 Дотоод алдаа гарлаа. Дараа дахин оролдоно уу.');
+        return next();
       }
-
-      await next();
     });
   }
 }

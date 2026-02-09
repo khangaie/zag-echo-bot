@@ -1,10 +1,17 @@
 // bot.js
 const { ActivityHandler } = require('botbuilder');
-const { searchSharePoint } = require('./graph/sharepointSearch');
-const { getGraphToken } = require('./graph/token');
 
 // Feature flag: RAG + OCR карт асаах/унтраах
 const FEATURE_RAG_CARD = (process.env.FEATURE_RAG_CARD || '0') === '1';
+
+// conversation history хадгалах (follow-up query rewrite хийхэд)
+const historyMap = new Map(); // conversation.id -> [{role,text}]
+
+function pushHistory(convId, role, text) {
+  const h = historyMap.get(convId) || [];
+  h.push({ role, text });
+  historyMap.set(convId, h.slice(-6));
+}
 
 class ZAGBot extends ActivityHandler {
   constructor() {
@@ -24,38 +31,28 @@ class ZAGBot extends ActivityHandler {
     // 💬 Message handler
     this.onMessage(async (context, next) => {
       const question = (context.activity.text || '').trim();
+      const convId = context.activity.conversation?.id || 'default';
 
       if (!question) {
         await context.sendActivity('❓ Асуултаа бичнэ үү.');
         return await next();
       }
 
-      await context.sendActivity('🔎 SharePoint баримт хайж байна…');
+      // history-д user асуултаа хадгална
+      pushHistory(convId, 'user', question);
 
       try {
-        // 1) SharePoint хайлт (холбогдох линкүүд)
-        const accessToken = await getGraphToken();
-        const spFiles = await searchSharePoint(question, accessToken);
+        // ✅ RAG асаалттай бол — оркестратор өөрөө SP+fallback+sticky контекстээр хариулна
+        if (FEATURE_RAG_CARD) {
+          await context.sendActivity('🔎 Баримт хайж байна…');
 
-        if (!spFiles || spFiles.length === 0) {
-          await context.sendActivity('⚠️ Хайлтаар баримт олдсонгүй.');
-          return await next();
-        }
-
-        // 2) Хэрэв RAG карт унтраалттай бол — хуучин горим: линк жагсаах
-        if (!FEATURE_RAG_CARD) {
-          const lines = spFiles
-            .map((f, i) => `${i + 1}. [${f.name}](${f.webUrl || '#'})`)
-            .join('\n');
-          await context.sendActivity(lines);
-        }
-        // 3) Шинэ горим: RAG + (runtime OCR) + Adaptive Card
-        else {
           const { answerQuestion } = require('./ai/orchestrator');
           const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
 
-          // answerQuestion → { ans, docs, extractedTextMap, ocrUsed }
-          const res = await answerQuestion(question);
+          const res = await answerQuestion(question, {
+            threadId: convId,
+            history: historyMap.get(convId) || []
+          });
 
           const card = buildCopilotResponse({
             question,
@@ -66,16 +63,36 @@ class ZAGBot extends ActivityHandler {
           }).adaptiveCard;
 
           await context.sendActivity({
-            attachments: [
-              {
-                contentType: 'application/vnd.microsoft.card.adaptive',
-                content: card
-              }
-            ]
+            attachments: [{
+              contentType: 'application/vnd.microsoft.card.adaptive',
+              content: card
+            }]
           });
+
+          if (res?.ans?.tldr) pushHistory(convId, 'assistant', res.ans.tldr);
+          return await next();
         }
+
+        // ❎ RAG унтраалттай бол — зөвхөн SP линк жагсаана
+        await context.sendActivity('🔎 SharePoint баримт хайж байна…');
+
+        const { searchSharePoint } = require('./graph/sharepointSearch');
+        const { getGraphToken } = require('./graph/token');
+
+        const accessToken = await getGraphToken();
+        const spFiles = await searchSharePoint(question, accessToken);
+
+        if (!spFiles || spFiles.length === 0) {
+          await context.sendActivity('⚠️ Хайлтаар баримт олдсонгүй.');
+          return await next();
+        }
+
+        const lines = spFiles
+          .map((f, i) => `${i + 1}. ${f.webUrl || '#'}`)
+          .join('\n');
+
+        await context.sendActivity(lines);
       } catch (e) {
-        // Алдаа: лог + хэрэглэгчид эелдэг мессеж
         console.error('onMessage error:', e);
         await context.sendActivity('🚨 Дотоод алдаа гарлаа. Дараа дахин оролдоно уу.');
       }

@@ -1,6 +1,6 @@
 // ai/orchestrator.js
-const { retrievePassages } = require('../graph/aiSearch'); // INDEX_NAME env ашиглана [1](https://teams.microsoft.com/l/meeting/details?eventId=AAMkADhhMDZmOWU3LTg3NTAtNDU0Yi04YWJiLWJjODQzYmFhNzU3OQFRAAgI3mHuAjAAAEYAAAAAvq_S3HMDy02p86tJmhG3lAcA5DT40VE1k0Ck9Q8rrVakbwAAAAABDQAA5DT40VE1k0Ck9Q8rrVakbwAE6f2d7QAAEA%3d%3d)
-const { searchSharePoint, searchSharePointBroad } = require('../graph/sharepointSearch');
+const { retrievePassages } = require('../graph/aiSearch'); // INDEX_NAME env ашиглана [1](https://outlook.office.com/owa/?viewmodel=IAttachmentViewModelPopoutFactory&AttachmentId=AAMkADhhMDZmOWU3LTg3NTAtNDU0Yi04YWJiLWJjODQzYmFhNzU3OQBGAAAAAAC%2br5LccwPLTanzq0maEbeUBwDkNPjRUTWTQKT1DyutVqRvAAAAAAEMAADkNPjRUTWTQKT1DyutVqRvAAUXYnOkAAABEgAQABtWa2s6baZFsx5SrQLG2Gs%3d&ItemId=AAMkADhhMDZmOWU3LTg3NTAtNDU0Yi04YWJiLWJjODQzYmFhNzU3OQBGAAAAAAC%2br5LccwPLTanzq0maEbeUBwDkNPjRUTWTQKT1DyutVqRvAAAAAAEMAADkNPjRUTWTQKT1DyutVqRvAAUXYnOkAAA%3d&web=1)
+const { searchSharePoint, searchSharePointBroad } = require('../graph/sharepointSearch'); // таны файлын signature нэмэлт аргумент авахад саадгүй [2](https://outlook.office.com/owa/?viewmodel=IAttachmentViewModelPopoutFactory&AttachmentId=AAMkADhhMDZmOWU3LTg3NTAtNDU0Yi04YWJiLWJjODQzYmFhNzU3OQBGAAAAAAC%2br5LccwPLTanzq0maEbeUBwDkNPjRUTWTQKT1DyutVqRvAAAAAAEJAADkNPjRUTWTQKT1DyutVqRvAATpVcTpAAABEgAQAO6CqXvIsnFMjSCGJFH46%2bk%3d&ItemId=AAMkADhhMDZmOWU3LTg3NTAtNDU0Yi04YWJiLWJjODQzYmFhNzU3OQBGAAAAAAC%2br5LccwPLTanzq0maEbeUBwDkNPjRUTWTQKT1DyutVqRvAAAAAAEJAADkNPjRUTWTQKT1DyutVqRvAATpVcTpAAA%3d&web=1)
 const { getGraphToken } = require('../graph/token');
 const { askAI } = require('../graph/askAI');
 const { processFiles } = require('../graph/fileProcessor');
@@ -9,10 +9,10 @@ const { detectIntent } = require('./intentDetector');
 const { resolveFolders } = require('./folderRouter');
 const { contractCache, makeContractCacheKey } = require('./contractCache');
 
-const THREAD_CTX = new Map();
+const THREAD_CTX = new Map(); // threadId -> { docs, lastQ }
 
-const uniqBy = (arr, key) =>
-  Array.from(new Map((arr || []).map(x => [key(x), x])).values());
+const uniqBy = (arr, keyFn) =>
+  Array.from(new Map((arr || []).map(x => [keyFn(x), x])).values());
 
 function escapeRegExp(s) {
   return String(s || '').replace(/[.*+?^${}()|\n[\]\\]/g, '\\$&');
@@ -20,24 +20,25 @@ function escapeRegExp(s) {
 
 function scoreDoc(question, content = '') {
   if (!content) return 0;
-  const qTokens = (question || '')
+  const qTokens = String(question || '')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .filter(t => t.length > 1);
 
   const text = String(content || '').toLowerCase();
-  return qTokens.reduce(
-    (s, t) => s + (text.match(new RegExp(`\\b${escapeRegExp(t)}\\b`, 'g')) || []).length,
-    0
-  );
+  return qTokens.reduce((sum, t) => {
+    const re = new RegExp(`\\b${escapeRegExp(t)}\\b`, 'g');
+    return sum + (text.match(re) || []).length;
+  }, 0);
 }
 
 function focusSnippet(question, content, max = 4000) {
   if (!content) return '';
-  const q = (question || '').split(/\s+/).filter(Boolean).slice(0, 6);
+  const q = String(question || '').split(/\s+/).filter(Boolean).slice(0, 6);
+  const lower = String(content).toLowerCase();
   const idx =
-    q.map(k => String(content).toLowerCase().indexOf(k.toLowerCase()))
+    q.map(k => lower.indexOf(k.toLowerCase()))
       .filter(i => i >= 0)
       .sort((a, b) => a - b)[0] ?? 0;
 
@@ -52,19 +53,16 @@ function rewriteQuery(question, history = [], pinned = []) {
   return joined.length > 400 ? joined.slice(-400) : joined;
 }
 
-// ✅ Company extractor: "scm ХХК", "smc llc", "SMC"
+// Company extractor: "scm ХХК", "smc llc", "SMC"
 function extractCompany(question = '') {
   const q = String(question || '').toLowerCase();
 
-  // SCM/SMC гэх товчлол дангаараа орсон эсэх
   if (q.includes('smc')) return 'smc';
   if (q.includes('scm')) return 'scm';
 
-  // "xxx ХХК" хэлбэр
   const m = q.match(/([a-zа-яё]+)\s*ххк/i);
   if (m && m[1]) return m[1].toLowerCase();
 
-  // "xxx llc" хэлбэр
   const m2 = q.match(/([a-zа-яё]+)\s*llc/i);
   if (m2 && m2[1]) return m2[1].toLowerCase();
 
@@ -76,14 +74,27 @@ function isProcessDocName(name = '') {
   return n.includes('процесс') || n.includes('process') || n.includes('п_гэрээ');
 }
 
-function contractQueryNarrow(question, company) {
-  let q = String(question || '').toLowerCase();
-  q = q
-    .replace(/хийсэн|байгуулсан|чухал|заалт|ямар|юу|өг/gi, ' ')
+// Contract query cleaner (no guessing, just normalize)
+function rewriteContractQuestion(q = '') {
+  return String(q)
+    .toLowerCase()
+    .replace(/тэй|тай|ийн|ын|ны|ийнх нь/gi, ' ')
+    .replace(/чухал\s*заалт(ууд)?/gi, ' ')
+    .replace(/ямар|юу|өг|хэлж\s*өг/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function contractQueryNarrow(question, company) {
+  let q = rewriteContractQuestion(question);
+  q = q
+    .replace(/хийсэн|байгуулсан|заалт|өг/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
   if (company && !q.includes(company)) q = `${company} ${q}`;
-  if (!q.includes('гэрээ') && (q.includes('contract') || company)) q = `${q} гэрээ`;
+  if (!q.includes('гэрээ')) q = `${q} гэрээ`;
+
   return q.slice(0, 140);
 }
 
@@ -95,7 +106,7 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
   const needSteps = !!intent.needSteps;
   const company = extractCompany(question);
 
-  // ✅ CONTRACT CACHE (0 Graph / 0 OCR on repeats)
+  // ✅ CONTRACT cache (repeat Q: 0 Graph / 0 OCR)
   if (domain === 'contract') {
     const key = makeContractCacheKey(question, { domain, company });
     const cached = contractCache.get(key);
@@ -104,9 +115,9 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
     }
   }
 
-  // ✅ Prefer AI Search (0 Graph burst) — use narrowed query for contract
+  // ✅ Prefer AI Search first (0 Graph burst)
   const qForSearch = domain === 'contract' ? contractQueryNarrow(question, company) : question;
-  let aiSnippets = await retrievePassages(qForSearch, 10); // INDEX_NAME env [1](https://teams.microsoft.com/l/meeting/details?eventId=AAMkADhhMDZmOWU3LTg3NTAtNDU0Yi04YWJiLWJjODQzYmFhNzU3OQFRAAgI3mHuAjAAAEYAAAAAvq_S3HMDy02p86tJmhG3lAcA5DT40VE1k0Ck9Q8rrVakbwAAAAABDQAA5DT40VE1k0Ck9Q8rrVakbwAE6f2d7QAAEA%3d%3d)
+  const aiSnippets = await retrievePassages(qForSearch, 10);
   let aiDocs = (aiSnippets || []).map(d => ({
     id: d.id,
     driveId: d.driveId,
@@ -115,19 +126,12 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
     content: d.content || ''
   }));
 
-  // ✅ PROJECT асуултад PROCESS баримтыг ашиглахгүй
-if (domain === 'project') {
-  aiDocs = aiDocs.filter(d => {
-    const n = String(d.fileName || '').toLowerCase();
-    return !(
-      n.includes('процесс') ||
-      n.includes('process') ||
-      n.includes('п_гэрээ')
-    );
-  });
-}
+  // ✅ PROJECT: process баримт ашиглахгүй
+  if (domain === 'project') {
+    aiDocs = aiDocs.filter(d => !isProcessDocName(d.fileName));
+  }
 
-  // ✅ CONTRACT guard: never use process docs as contract evidence
+  // ✅ CONTRACT: process баримт ашиглахгүй + company filter (strict)
   if (domain === 'contract') {
     aiDocs = aiDocs.filter(d => !isProcessDocName(d.fileName));
     if (company) {
@@ -136,13 +140,11 @@ if (domain === 'project') {
     }
   }
 
-  // Rank AI docs
   const aiRanked = aiDocs
     .map(d => ({ ...d, _score: scoreDoc(question, d.content) }))
     .filter(d => (d.content || '').length > 80)
     .sort((a, b) => b._score - a._score);
 
-  // ✅ If AI Search has enough info: answer with 0 Graph / 0 OCR
   if (aiRanked.length > 0) {
     const topDocs = aiRanked.slice(0, 5);
     const focusedMap = {};
@@ -150,9 +152,14 @@ if (domain === 'project') {
 
     const ans = await askAI(question, topDocs, { needSteps, domain, company });
 
-    const payload = { ans, docs: topDocs, extractedTextMap: focusedMap, ocrUsed: false, folders: resolveFolders(domain) };
+    const payload = {
+      ans,
+      docs: topDocs,
+      extractedTextMap: focusedMap,
+      ocrUsed: false,
+      folders: resolveFolders(domain)
+    };
 
-    // cache contract result
     if (domain === 'contract') {
       const key = makeContractCacheKey(question, { domain, company });
       contractCache.set(key, payload);
@@ -162,7 +169,7 @@ if (domain === 'project') {
     return { ...payload, domain, needSteps, folders: payload.folders };
   }
 
-  // ✅ Fallback: SharePoint search (Graph) — keep minimal; OCR OFF for contract
+  // ✅ Fallback: SharePoint search (Graph) — OCR OFF for contract
   const token = await getGraphToken();
   const folders = resolveFolders(domain);
 
@@ -171,9 +178,7 @@ if (domain === 'project') {
     spFiles = await searchSharePointBroad(rewriteQuery(qForSearch, history, sticky.docs), token);
   }
 
-  // ✅ OCR policy: contract => OFF
-  const needOCR = domain !== 'contract';
-
+  const needOCR = domain !== 'contract'; // ✅ contract => OFF
   const toProcess = (spFiles || []).slice(0, 5).map(f => ({
     id: f.id,
     driveId: f.driveId,
@@ -195,12 +200,15 @@ if (domain === 'project') {
     driveId: f.driveId,
     fileName: f.name,
     url: f.webUrl,
-    content: extractedTextMap[f.name] || '' // may be empty
+    content: extractedTextMap[f.name] || ''
   }));
 
   let docs = uniqBy([...aiDocs, ...spDocs], d => d.url || d.fileName);
 
-  // ✅ CONTRACT: drop process docs even in fallback
+  if (domain === 'project') {
+    docs = docs.filter(d => !isProcessDocName(d.fileName));
+  }
+
   if (domain === 'contract') {
     docs = docs.filter(d => !isProcessDocName(d.fileName));
     if (company) {
@@ -215,7 +223,6 @@ if (domain === 'project') {
 
   let topDocs = ranked.slice(0, 5);
   if (topDocs.length === 0 && sticky.docs.length) topDocs = sticky.docs;
-  if (topDocs.length === 0) topDocs = aiDocs.slice(0, 5);
 
   const focusedMap = {};
   for (const d of topDocs) focusedMap[d.fileName] = focusSnippet(question, d.content || '', 4000);

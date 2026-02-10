@@ -7,6 +7,7 @@ const { processFiles } = require('../graph/fileProcessor');
 
 const { detectIntent } = require('./intentDetector');
 const { resolveFolders } = require('./folderRouter');
+const { contractCache, makeContractCacheKey } = require('./contractCache');
 
 const THREAD_CTX = new Map(); // threadId -> { docs, lastQ }
 
@@ -14,7 +15,7 @@ const uniqBy = (arr, key) =>
   Array.from(new Map((arr || []).map(x => [key(x), x])).values());
 
 function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|\n[\]\\]/g, '\\$&');
+  return String(s || '').replace(/[.*+?^${}()|\n[\]\\]/g, '\\$&');
 }
 
 function scoreDoc(question, content = '') {
@@ -51,22 +52,46 @@ function rewriteQuery(question, history = [], pinned = []) {
   return joined.length > 400 ? joined.slice(-400) : joined;
 }
 
+// ✅ Contract: keyword narrowing (SMC auto-filter)
+function contractQueryNarrow(question, hasSMC) {
+  const q = String(question || '').toLowerCase();
+  // keep only useful tokens
+  let base = q
+    .replace(/т(эй|тай|тэй)/gi, ' ')
+    .replace(/хийсэн|байгуулсан|чухал|заалт|ямар|юу|тухай/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // prefer "smc гэрээ" if smc mentioned
+  if (hasSMC && !base.includes('smc')) base = `smc ${base}`;
+  if (!base.includes('гэрээ') && /contract|гэрээ/i.test(q)) base = `${base} гэрээ`;
+  return base.slice(0, 120);
+}
+
 async function answerQuestion(question, { threadId = 'default', history = [] } = {}) {
   const sticky = THREAD_CTX.get(threadId) || { docs: [], lastQ: '' };
 
-  // ✅ intent
-  const intent = detectIntent(question); // { domain, needSteps }
+  const intent = detectIntent(question);
   const domain = intent.domain || 'general';
   const needSteps = !!intent.needSteps;
+  const hasSMC = !!intent.hasSMC;
 
-  // ✅ folder routing
-  const folders = resolveFolders(domain);
+  // ✅ CONTRACT PRE-INDEXED CACHE (0 Graph / 0 OCR)
+  if (domain === 'contract') {
+    const key = makeContractCacheKey(question, { domain, smc: hasSMC });
+    const cached = contractCache.get(key);
+    if (cached) {
+      return { ...cached, domain, needSteps, folders: ['CONTRACT-AI'], ocrUsed: false };
+    }
+  }
 
-  const token = await getGraphToken();
+  // 1) Prefer AI Search (0 Graph)
+  const qForSearch = (domain === 'contract')
+    ? contractQueryNarrow(question, hasSMC)
+    : question;
 
-  // AI Search (optional)
-  const aiSnippets = await retrievePassages(question, 6);
-  const aiDocs = (aiSnippets || []).map(d => ({
+  const aiSnippets = await retrievePassages(qForSearch, 8);
+  let aiDocs = (aiSnippets || []).map(d => ({
     id: d.id,
     driveId: d.driveId,
     fileName: d.fileName || d.title || 'Source',
@@ -74,21 +99,55 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
     content: d.content || ''
   }));
 
-  // ✅ SharePoint search зөвхөн route болсон фолдерууд
-  let spFiles = await searchSharePoint(
-    rewriteQuery(question, history, sticky.docs),
-    token,
-    folders
-  );
-
-  if (!spFiles || spFiles.length === 0) {
-    spFiles = await searchSharePointBroad(
-      rewriteQuery(question, history, sticky.docs),
-      token
-    );
+  // ✅ SMC auto-filter (only keep SMC-related docs when smc in query)
+  if (domain === 'contract' && hasSMC) {
+    const filtered = aiDocs.filter(d => String(d.fileName || '').toLowerCase().includes('smc'));
+    if (filtered.length) aiDocs = filtered;
   }
 
-  const toProcess = (spFiles || []).map(f => ({
+  // If AI search gives usable content, answer with 0 Graph / 0 OCR
+  const aiRanked = aiDocs
+    .map(d => ({ ...d, _score: scoreDoc(question, d.content) }))
+    .filter(d => (d.content || '').length > 80)
+    .sort((a, b) => b._score - a._score);
+
+  if (domain === 'contract' && aiRanked.length > 0) {
+    const topDocs = aiRanked.slice(0, 5);
+    const focusedMap = {};
+    for (const d of topDocs) focusedMap[d.fileName] = focusSnippet(question, d.content, 4000);
+
+    const ans = await askAI(question, topDocs, { needSteps: false, domain, smc: hasSMC });
+
+    const payload = {
+      ans,
+      docs: topDocs,
+      extractedTextMap: focusedMap,
+      ocrUsed: false
+    };
+
+    // cache it
+    const key = makeContractCacheKey(question, { domain, smc: hasSMC });
+    contractCache.set(key, payload);
+
+    THREAD_CTX.set(threadId, { docs: topDocs, lastQ: question });
+    return { ...payload, domain, needSteps: false, folders: ['CONTRACT-AI'] };
+  }
+
+  // 2) Fallback: minimal SharePoint search (Graph) — but NO OCR for contract
+  const token = await getGraphToken();
+
+  const folders = resolveFolders(domain, question, hasSMC);
+
+  // IMPORTANT: keep SP calls minimal, no broad fanout
+  let spFiles = await searchSharePoint(rewriteQuery(qForSearch, history, sticky.docs), token, folders);
+  if (!spFiles || spFiles.length === 0) {
+    spFiles = await searchSharePointBroad(rewriteQuery(qForSearch, history, sticky.docs), token);
+  }
+
+  // ✅ OCR policy: contract => OFF
+  const needOCR = domain !== 'contract';
+
+  const toProcess = (spFiles || []).slice(0, 5).map(f => ({
     id: f.id,
     driveId: f.driveId,
     name: f.name,
@@ -98,25 +157,25 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
   let extractedTextMap = {};
   let ocrUsed = false;
 
-  if (toProcess.length > 0) {
+  if (needOCR && toProcess.length > 0) {
     const r = await processFiles(toProcess, token);
     extractedTextMap = r.extractedTextMap || {};
     ocrUsed = !!r.ocrUsed;
   }
 
-  const spDocs = (spFiles || []).map(f => ({
+  const spDocs = (spFiles || []).slice(0, 5).map(f => ({
     id: f.id,
     driveId: f.driveId,
     fileName: f.name,
     url: f.webUrl,
-    content: extractedTextMap[f.name] || ''
+    content: extractedTextMap[f.name] || '' // may be empty
   }));
 
   let docs = uniqBy([...aiDocs, ...spDocs], d => d.url || d.fileName);
 
+  // ✅ Even if content empty, if files exist we still proceed (template answer)
   const ranked = docs
-    .map(d => ({ ...d, _score: scoreDoc(question, d.content) }))
-    .filter(d => (d.content || '').length > 100)
+    .map(d => ({ ...d, _score: scoreDoc(question, d.content || '') }))
     .sort((a, b) => b._score - a._score);
 
   let topDocs = ranked.slice(0, 5);
@@ -124,24 +183,20 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
   if (topDocs.length === 0) topDocs = aiDocs.slice(0, 5);
 
   const focusedMap = {};
-  for (const d of topDocs) {
-    focusedMap[d.fileName] = focusSnippet(question, d.content, 4000);
+  for (const d of topDocs) focusedMap[d.fileName] = focusSnippet(question, d.content || '', 4000);
+
+  const ans = await askAI(question, topDocs, { needSteps, domain, smc: hasSMC });
+
+  const result = { ans, docs: topDocs, extractedTextMap: focusedMap, ocrUsed, domain, needSteps, folders };
+
+  // cache contract fallback result too
+  if (domain === 'contract') {
+    const key = makeContractCacheKey(question, { domain, smc: hasSMC });
+    contractCache.set(key, { ans, docs: topDocs, extractedTextMap: focusedMap, ocrUsed: false });
   }
 
-  // ✅ askAI (Copilot structured)
-  const ans = await askAI(question, topDocs, { needSteps, domain });
-
   THREAD_CTX.set(threadId, { docs: topDocs, lastQ: question });
-
-  return {
-    ans,
-    domain,
-    needSteps,
-    folders,
-    docs: topDocs,
-    extractedTextMap: focusedMap,
-    ocrUsed
-  };
+  return result;
 }
 
 module.exports = { answerQuestion };

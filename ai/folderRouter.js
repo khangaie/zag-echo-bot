@@ -1,8 +1,14 @@
 // ai/folderRouter.js
-function resolveFolders(domain = 'general') {
+function resolveFolders(domain = 'general', question = '') {
+  const q = String(question || '').toLowerCase();
+  const hasContractWord = /(гэрээ|contract|заалт|нөхцөл)/i.test(q);
+
   switch (domain) {
     case 'process':
-      return ['PROCESS-AI'];
+      // ✅ "гэрээ ... процесс" бол PROCESS + CONTRACT хоёрыг зэрэг хай
+      return hasContractWord
+        ? ['PROCESS-AI', 'CONTRACT-AI']
+        : ['PROCESS-AI'];
 
     case 'hse':
       return ['HSE-AI'];
@@ -11,10 +17,10 @@ function resolveFolders(domain = 'general') {
       return ['HR-AI'];
 
     case 'contract':
-      return ['CONTRACT-AI'];
+      // ✅ SMC гэрээ ихэвчлэн PROJECT-тай холбоотой байж болох тул project-ийг 2 дахь болгож нэмэж болно
+      return ['CONTRACT-AI', 'PROJECT-AI'];
 
     case 'project':
-      // Төсөл нь ихэвчлэн PROCESS/CONTRACT-тай холилддог тул 2-ыг дагалдуулж болно
       return ['PROJECT-AI', 'PROCESS-AI', 'CONTRACT-AI'];
 
     default:

@@ -13,29 +13,26 @@ function detectIntent(question = '') {
     'гэрээ', 'contract', 'заалт', 'нөхцөл', 'торгууль', 'хугацаа', 'үнэ', 'appendix', 'нэмэлт'
   ]);
 
+  const isProject = hasAny(q, [
+    'төсөл', 'project', 'төлөвлөлт', 'гүйцэтгэл', 'schedule', 'timeline', 'wbs', 'progress'
+  ]);
+
   const isHSE = hasAny(q, [
     'hse', 'osha', 'аюулгүй', 'эрсдэл', 'осол', 'ppe', 'permit', 'standard', 'стандарт', 'журам', 'заавар'
   ]);
 
   const isHR = hasAny(q, [
-    'hr', 'ажилтан', 'цалин', 'чөлөө', 'амралт', 'ажлын цаг', 'албан тушаал', 'томилгоо', 'сонгон'
+    'hr', 'ажилтан', 'цалин', 'чөлөө', 'амралт', 'ажлын цаг', 'албан тушаал', 'томилгоо'
   ]);
 
-  const isProject = hasAny(q, [
-    'project', 'төсөл', 'smc', 'oyutolgoi', 'ot', 'scope', 'schedule', 'timeline', 'wbs'
-  ]);
-
-  const hasSMC = hasAny(q, ['smc']);
-
-  // ✅ Алхам/процесс гэж орвол заавал process
   let domain = 'general';
   if (needSteps) domain = 'process';
   else if (isContract) domain = 'contract';
+  else if (isProject) domain = 'project';
   else if (isHSE) domain = 'hse';
   else if (isHR) domain = 'hr';
-  else if (isProject) domain = 'project';
 
-  return { domain, needSteps, isContract, isProject, hasSMC };
+  return { domain, needSteps };
 }
 
 module.exports = { detectIntent };

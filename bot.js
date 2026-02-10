@@ -1,15 +1,32 @@
 // bot.js
 const { ActivityHandler } = require('botbuilder');
 
-// Feature flag: RAG + OCR карт асаах/унтраах
 const FEATURE_RAG_CARD = (process.env.FEATURE_RAG_CARD || '0') === '1';
 
-// conversation history хадгалах (follow-up query rewrite хийхэд)
-const historyMap = new Map(); // conversation.id -> [{role,text}]
+const historyMap = new Map();
 function pushHistory(convId, role, text) {
   const h = historyMap.get(convId) || [];
   h.push({ role, text });
   historyMap.set(convId, h.slice(-6));
+}
+
+// ✅ card action / messageBack‑аас question гаргах
+function extractQuestion(activity) {
+  const t = String(activity?.text || '').trim();
+  if (t) return t;
+
+  // messageBack payload
+  const v = activity?.value;
+  if (v && typeof v === 'object') {
+    const mt = v.msteams;
+    const candidate =
+      (mt && (mt.text || mt.messageText || mt.displayText)) ||
+      v.text ||
+      v.query ||
+      v.q;
+    if (candidate) return String(candidate).trim();
+  }
+  return '';
 }
 
 class ZAGBot extends ActivityHandler {
@@ -27,9 +44,9 @@ class ZAGBot extends ActivityHandler {
     });
 
     this.onMessage(async (context, next) => {
-      const question = (context.activity.text || '').trim();
       const convId = context.activity.conversation?.id || 'default';
 
+      const question = extractQuestion(context.activity);
       if (!question) {
         await context.sendActivity('❓ Асуултаа бичнэ үү.');
         return next();
@@ -41,7 +58,6 @@ class ZAGBot extends ActivityHandler {
         if (FEATURE_RAG_CARD) {
           await context.sendActivity('🔎 Баримтаас хайж байна…');
 
-          // ✅ Require‑ууд алдахад сервис унахгүй (deploy restart loop тасална)
           let answerQuestion, buildCopilotResponse;
           try {
             ({ answerQuestion } = require('./ai/orchestrator'));
@@ -62,7 +78,10 @@ class ZAGBot extends ActivityHandler {
             extractedTextMap: res.extractedTextMap || {},
             files: res.docs || [],
             ocrUsed: !!res.ocrUsed,
-            ans: res.ans
+            ans: res.ans,
+            needSteps: !!res.needSteps,
+            domain: res.domain || 'general',
+            folders: res.folders || []
           }).adaptiveCard;
 
           await context.sendActivity({
@@ -76,7 +95,6 @@ class ZAGBot extends ActivityHandler {
           return next();
         }
 
-        // RAG унтраалттай үед (танайд бол асаалттай)
         await context.sendActivity('ℹ️ RAG унтраалттай байна.');
         return next();
 

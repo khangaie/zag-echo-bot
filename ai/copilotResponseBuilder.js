@@ -4,16 +4,14 @@ const { buildCopilotAdaptiveCard } = require('./adaptiveCardBuilder');
 
 function uniq(arr) { return Array.from(new Set(arr)); }
 function cleanSteps(steps = []) {
-  return uniq(
-    steps.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean)
-  ).slice(0, 10);
+  return uniq(steps.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean)).slice(0, 10);
 }
 
 function makeCitations({ ans, files = [] } = {}) {
   let fromAns = [];
   if (ans && Array.isArray(ans.citations)) {
     fromAns = ans.citations
-      .map((c) => {
+      .map(c => {
         if (!c) return null;
         if (typeof c === 'string') return { title: undefined, webUrl: c };
         const webUrl = c.webUrl || c.url || c.link;
@@ -24,7 +22,7 @@ function makeCitations({ ans, files = [] } = {}) {
   }
 
   const fromFiles = (Array.isArray(files) ? files : [])
-    .map((d) => {
+    .map(d => {
       const webUrl = d.webUrl || d.url;
       const title = d.name || d.title || d.fileName || 'Source';
       return webUrl ? { title, webUrl } : null;
@@ -55,7 +53,6 @@ function buildCopilotResponse({
 }) {
   const text = Object.values(extractedTextMap || {}).join('\n');
 
-  // steps зөвхөн хэрэгтэй үед
   let steps = [];
   if (needSteps) {
     const fallbackSteps = extractProcessSteps(text);
@@ -69,14 +66,14 @@ function buildCopilotResponse({
     question,
     domain,
     folders,
-    summary: (ans && ans.tldr) ? ans.tldr : (text ? 'Баримтаас үндсэн мэдээлэл илрүүлэв.' : 'Мэдээлэл олдсонгүй'),
+    summary: (ans && ans.tldr) ? ans.tldr : (files?.length ? 'Баримт олдлоо. Дүгнэлт гаргаж байна.' : 'Мэдээлэл олдсонгүй'),
     keyPoints: (ans && Array.isArray(ans.keyPoints)) ? ans.keyPoints : [],
     facts: (ans && Array.isArray(ans.facts)) ? ans.facts : [],
     steps,
     followUps: (ans && Array.isArray(ans.followUps)) ? ans.followUps : [],
     citations,
     notes: (ans && ans.notes) ? ans.notes : '',
-    confidence: (ans && typeof ans.confidence === 'number') ? ans.confidence : (ocrUsed ? 92 : 98)
+    confidence: (ans && typeof ans.confidence === 'number') ? ans.confidence : (ocrUsed ? 92 : (files?.length ? 70 : 0))
   });
 
   return { adaptiveCard };

@@ -16,10 +16,19 @@ function normalizeCitations(documents = []) {
   }));
 }
 
+function looksLikeRealContractDoc(d) {
+  const n = String(d?.fileName || '').toLowerCase();
+  // real contract indicators
+  if (n.includes('гэрээ') || n.includes('contract') || n.includes('agreement')) return true;
+  // exclude process docs
+  if (n.includes('процесс') || n.includes('process') || n.includes('п_гэрээ')) return false;
+  return false;
+}
+
 async function askAI(question, documents = [], options = {}) {
   const needSteps = !!options.needSteps;
   const domain = String(options.domain || 'general');
-  const smc = !!options.smc;
+  const company = String(options.company || '').toLowerCase();
 
   if (!Array.isArray(documents)) documents = [];
   if (documents.length === 0) {
@@ -35,50 +44,62 @@ async function askAI(question, documents = [], options = {}) {
     };
   }
 
+  // ✅ CONTRACT guardrail: real contract doc байхгүй бол hallucination хийхгүй
+  if (domain === 'contract') {
+    const real = documents.filter(looksLikeRealContractDoc);
+    if (real.length === 0) {
+      return {
+        tldr: company
+          ? `${company.toUpperCase()} ХХК-тай байгуулсан бодит гэрээ (файл) олдсонгүй.`
+          : 'Тухайн компанитай байгуулсан бодит гэрээ (файл) олдсонгүй.',
+        keyPoints: [],
+        facts: [],
+        steps: [],
+        followUps: [
+          'Гэрээний яг файл нэр (эсвэл огноо/дугаар)-г бичиж асуух',
+          'Тухайн гэрээ CONTRACT-AI фолдерт байршуулсан эсэхийг шалгах',
+          'Компанийн нэрийн бичлэг (SMC/SCM гэх мэт)-ийг тодруулах'
+        ],
+        notes: 'Ерөнхий процесс/журамын баримтаар бодит гэрээний заалтыг дүгнэх боломжгүй.',
+        citations: [],
+        confidence: 0
+      };
+    }
+    // real docs‑оор л ажиллуулна
+    documents = real;
+  }
+
   const contextText = documents
     .map(d => `Файл: ${d.fileName}\n---\n${String(d.content || '').trim()}`)
     .join('\n\n================\n\n');
 
-  // ✅ Contract-specific template
   const contractTemplate = [
-    'CONTRACT горим: "facts" дээр гэрээний чухал заалтуудыг хүснэгтээр гарга.',
-    'facts-д дараах түлхүүрүүдийг боломжтой бол бөглө (байхгүй бол "Тодорхойгүй" гэж бич):',
-    '- Талууд',
-    '- Гэрээний төрөл/зорилго',
-    '- Ажлын хамрах хүрээ (Scope)',
-    '- Үнэ/Төлбөрийн нөхцөл',
-    '- Хугацаа/Гүйцэтгэлийн хугацаа',
-    '- Хүлээн авах/Акт/Баталгаажуулалт',
-    '- Чанарын баталгаа/Барьцаа',
-    '- Хариуцлага/Торгууль',
-    '- Нууцлал',
-    '- Гэрээ дуусгавар болгох нөхцөл',
-    '- Маргаан шийдвэрлэх журам',
-    'keyPoints-д 3–6 гол эрсдэл/анхаарах зүйл, эсвэл хамгийн чухал заалтуудыг товчлон бич.',
-    smc ? 'SMC гэж орсон тул SMC-тэй холбоотой хэсгийг илүү онцолж бич.' : ''
+    'CONTRACT горим: facts дээр чухал заалтуудыг хүснэгтээр гарга.',
+    'facts түлхүүрүүд (боломжтой бол бөглө, байхгүй бол "Тодорхойгүй"):',
+    'Талууд',
+    'Гэрээний төрөл/зорилго',
+    'Ажлын хамрах хүрээ (Scope)',
+    'Үнэ/Төлбөрийн нөхцөл',
+    'Хугацаа/Гүйцэтгэлийн хугацаа',
+    'Хүлээн авах/Акт/Баталгаажуулалт',
+    'Чанарын баталгаа/Барьцаа',
+    'Хариуцлага/Торгууль',
+    'Нууцлал',
+    'Гэрээ дуусгавар болгох нөхцөл',
+    'Маргаан шийдвэрлэх журам',
+    company ? `Компанийн нэр: ${company.toUpperCase()} (энэ компанитай холбоотойг онцол).` : ''
   ].filter(Boolean).join('\n');
 
   const system = [
-    'Чи Microsoft Copilot шиг ТОВЧ, ЦЭГЦТЭЙ, АЖЛЫН ХЭРЭГЛЭЭНИЙ хариулт өгнө.',
-    'Зөвхөн өгөгдсөн баримтуудын текстэд тулгуурлаж бич.',
-    'Баримтад байхгүй зүйлийг таамаглан НЭМЭХИЙГ ХОРИГЛОНО.',
-    'Зөвхөн JSON объект буцаа. Markdown/тайлбар/кодын блок БИЧИХГҮЙ.',
+    'Чи Microsoft Copilot шиг ТОВЧ, ЦЭГЦТЭЙ хариул.',
+    'Зөвхөн өгөгдсөн баримтын текстэд тулгуурла.',
+    'Баримтад байхгүй зүйлийг таамаглаж нэмэхийг ХОРИГЛОНО.',
+    'Зөвхөн JSON объект буцаа (Markdown/кодын блок үгүй).',
     '',
-    'JSON бүтэц (яг энэ түлхүүрүүдээр):',
-    '{',
-    '  "tldr": "1–2 өгүүлбэр гол хариу",',
-    '  "keyPoints": ["чухал цэг 1", "чухал цэг 2"],',
-    '  "facts": [{"title":"Нөхцөл","value":"Утга"}],',
-    '  "steps": ["..."],',
-    '  "followUps": ["Та бас ... асууж болно"],',
-    '  "notes": "анхаарах зүйл / хязгаарлалт байхгүй бол хоосон string"',
-    '}',
+    'JSON бүтэц:',
+    '{"tldr":"...","keyPoints":[],"facts":[{"title":"","value":""}],"steps":[],"followUps":[],"notes":""}',
     '',
-    'tldr: асуултад шууд хариул.',
-    'keyPoints: 2–6 ширхэг, богино, ажил хэрэгч.',
-    'facts: боломжтой бол 5–12 мөрийн "Нөхцөл/Утга" хүснэгт; боломжгүй бол [] буцаа.',
-    needSteps ? 'steps: 3–6 алхам буцаа.' : 'steps: хэрэглэгч процесс/алхам ШУУД хүсээгүй тул заавал [] буцаа.',
-    'followUps: 2–4 ширхэг, тухайн домэйны зөв дараагийн асуултын санал.',
+    needSteps ? 'steps: 3–6 алхам буцаа.' : 'steps: хэрэглэгч алхам/процесс асуугаагүй бол [] буцаа.',
     `Домэйн: ${domain}`,
     domain === 'contract' ? contractTemplate : '',
     'Монгол хэлээр бич.'
@@ -86,13 +107,11 @@ async function askAI(question, documents = [], options = {}) {
 
   const user = [
     `Асуулт: ${question}`,
-    `needSteps: ${needSteps ? 'true' : 'false'}`,
-    `smc: ${smc ? 'true' : 'false'}`,
     '',
-    'Баримтууд (зөвхөн эдгээр текстэд тулгуурлан дүгнэ):',
+    'Баримтууд:',
     contextText,
     '',
-    'Заавал JSON объект л буцаа.'
+    'JSON объект л буцаа.'
   ].join('\n');
 
   const raw = await callAzureOpenAI(
@@ -119,7 +138,6 @@ async function askAI(question, documents = [], options = {}) {
   let steps = Array.isArray(parsed.steps)
     ? parsed.steps.map(s => String(s || '').trim()).filter(Boolean).slice(0, 8)
     : [];
-
   if (!needSteps) steps = [];
 
   const followUps = Array.isArray(parsed.followUps)
@@ -129,18 +147,16 @@ async function askAI(question, documents = [], options = {}) {
   const notes = String(parsed.notes || '').trim();
   const citations = normalizeCitations(documents);
 
-  const final = tldr
-    ? { tldr, keyPoints, facts, steps, followUps, notes }
-    : {
-        tldr: 'Энэ асуултад баримтаас шууд нотлогдох хариулт олдсонгүй.',
-        keyPoints: [],
-        facts: [],
-        steps: [],
-        followUps: [],
-        notes: 'Баримтын нэр/код, эсвэл ямар фолдероос хайхыг тодруулбал илүү зөв хариулна.'
-      };
-
-  return { ...final, citations, confidence: confidenceScore(documents) };
+  return {
+    tldr: tldr || 'Хариу бэлдэхэд хангалттай мэдээлэл олдсонгүй.',
+    keyPoints,
+    facts,
+    steps,
+    followUps,
+    notes,
+    citations,
+    confidence: confidenceScore(documents)
+  };
 }
 
 module.exports = { askAI };

@@ -5,13 +5,16 @@ const { getGraphToken } = require('../graph/token');
 const { askAI } = require('../graph/askAI');
 const { processFiles } = require('../graph/fileProcessor');
 
+const { detectIntent } = require('./intentDetector');
+const { resolveFolders } = require('./folderRouter');
+
 const THREAD_CTX = new Map(); // threadId -> { docs, lastQ }
+
 const uniqBy = (arr, key) =>
   Array.from(new Map((arr || []).map(x => [key(x), x])).values());
 
-// ✅ ЗАСАГДСАН
 function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return s.replace(/[.*+?^${}()|\n[\]\\]/g, '\\$&');
 }
 
 function scoreDoc(question, content = '') {
@@ -24,8 +27,7 @@ function scoreDoc(question, content = '') {
 
   const text = content.toLowerCase();
   return qTokens.reduce(
-    (s, t) =>
-      s + (text.match(new RegExp(`\\b${escapeRegExp(t)}\\b`, 'g')) || []).length,
+    (s, t) => s + (text.match(new RegExp(`\\b${escapeRegExp(t)}\\b`, 'g')) || []).length,
     0
   );
 }
@@ -51,8 +53,18 @@ function rewriteQuery(question, history = [], pinned = []) {
 
 async function answerQuestion(question, { threadId = 'default', history = [] } = {}) {
   const sticky = THREAD_CTX.get(threadId) || { docs: [], lastQ: '' };
+
+  // ✅ intent
+  const intent = detectIntent(question); // { domain, needSteps }
+  const domain = intent.domain || 'general';
+  const needSteps = !!intent.needSteps;
+
+  // ✅ folder routing
+  const folders = resolveFolders(domain);
+
   const token = await getGraphToken();
 
+  // AI Search (optional)
   const aiSnippets = await retrievePassages(question, 6);
   const aiDocs = (aiSnippets || []).map(d => ({
     id: d.id,
@@ -62,9 +74,18 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
     content: d.content || ''
   }));
 
-  let spFiles = await searchSharePoint(rewriteQuery(question, history, sticky.docs), token);
+  // ✅ SharePoint search зөвхөн route болсон фолдерууд
+  let spFiles = await searchSharePoint(
+    rewriteQuery(question, history, sticky.docs),
+    token,
+    folders
+  );
+
   if (!spFiles || spFiles.length === 0) {
-    spFiles = await searchSharePointBroad(rewriteQuery(question, history, sticky.docs), token);
+    spFiles = await searchSharePointBroad(
+      rewriteQuery(question, history, sticky.docs),
+      token
+    );
   }
 
   const toProcess = (spFiles || []).map(f => ({
@@ -107,10 +128,20 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
     focusedMap[d.fileName] = focusSnippet(question, d.content, 4000);
   }
 
-  const ans = await askAI(question, topDocs);
+  // ✅ askAI (Copilot structured)
+  const ans = await askAI(question, topDocs, { needSteps, domain });
+
   THREAD_CTX.set(threadId, { docs: topDocs, lastQ: question });
 
-  return { ans, docs: topDocs, extractedTextMap: focusedMap, ocrUsed };
+  return {
+    ans,
+    domain,
+    needSteps,
+    folders,
+    docs: topDocs,
+    extractedTextMap: focusedMap,
+    ocrUsed
+  };
 }
 
 module.exports = { answerQuestion };

@@ -131,14 +131,31 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
     aiDocs = aiDocs.filter(d => !isProcessDocName(d.fileName));
   }
 
-  // ✅ CONTRACT: process баримт ашиглахгүй + company filter (strict)
-  if (domain === 'contract') {
-    aiDocs = aiDocs.filter(d => !isProcessDocName(d.fileName));
-    if (company) {
-      const filtered = aiDocs.filter(d => String(d.fileName || '').toLowerCase().includes(company));
-      if (filtered.length) aiDocs = filtered;
-    }
+function normalizeCompanyText(s = '') {
+  return String(s)
+    .toLowerCase()
+    .replace(/\s+/g, '')        // бүх space устгана
+    .replace(/[\.\-]/g, '')    // . - устгана
+    .replace(/llc/g, '')        // llc устгана
+    .replace(/ххк/g, '')        // ХХК устгана
+    .trim();
+}
+
+// ✅ CONTRACT: process баримт ашиглахгүй + company normalize match
+if (domain === 'contract') {
+  aiDocs = aiDocs.filter(d => !isProcessDocName(d.fileName));
+
+  if (company) {
+    const normCompany = normalizeCompanyText(company);
+
+    const filtered = aiDocs.filter(d => {
+      const fname = normalizeCompanyText(d.fileName || '');
+      return fname.includes(normCompany);
+    });
+
+    if (filtered.length) aiDocs = filtered;
   }
+}
 
   const aiRanked = aiDocs
     .map(d => ({ ...d, _score: scoreDoc(question, d.content) }))

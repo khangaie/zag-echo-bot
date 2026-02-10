@@ -10,20 +10,16 @@ function pushHistory(convId, role, text) {
   historyMap.set(convId, h.slice(-6));
 }
 
-// ✅ card action / messageBack‑аас question гаргах
 function extractQuestion(activity) {
   const t = String(activity?.text || '').trim();
   if (t) return t;
 
-  // messageBack payload
   const v = activity?.value;
   if (v && typeof v === 'object') {
     const mt = v.msteams;
     const candidate =
       (mt && (mt.text || mt.messageText || mt.displayText)) ||
-      v.text ||
-      v.query ||
-      v.q;
+      v.text || v.query || v.q;
     if (candidate) return String(candidate).trim();
   }
   return '';
@@ -45,8 +41,8 @@ class ZAGBot extends ActivityHandler {
 
     this.onMessage(async (context, next) => {
       const convId = context.activity.conversation?.id || 'default';
-
       const question = extractQuestion(context.activity);
+
       if (!question) {
         await context.sendActivity('❓ Асуултаа бичнэ үү.');
         return next();
@@ -58,15 +54,8 @@ class ZAGBot extends ActivityHandler {
         if (FEATURE_RAG_CARD) {
           await context.sendActivity('🔎 Баримтаас хайж байна…');
 
-          let answerQuestion, buildCopilotResponse;
-          try {
-            ({ answerQuestion } = require('./ai/orchestrator'));
-            ({ buildCopilotResponse } = require('./ai/copilotResponseBuilder'));
-          } catch (e) {
-            console.error('[Require error]', e);
-            await context.sendActivity('⚠️ Server тохиргооны алдаа байна (module load failed).');
-            return next();
-          }
+          const { answerQuestion } = require('./ai/orchestrator');
+          const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
 
           const res = await answerQuestion(question, {
             threadId: convId,

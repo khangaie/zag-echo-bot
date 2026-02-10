@@ -1,14 +1,12 @@
 // ai/contractCache.js
-// Simple in-memory LRU cache for CONTRACT answers (0 Graph burst on repeats)
 class LRUCache {
-  constructor(max = 100) {
+  constructor(max = 200) {
     this.max = max;
-    this.map = new Map(); // key -> { value, ts }
+    this.map = new Map();
   }
   get(key) {
     if (!this.map.has(key)) return null;
     const v = this.map.get(key);
-    // refresh
     this.map.delete(key);
     this.map.set(key, v);
     return v.value;
@@ -17,8 +15,8 @@ class LRUCache {
     if (this.map.has(key)) this.map.delete(key);
     this.map.set(key, { value, ts: Date.now() });
     if (this.map.size > this.max) {
-      const firstKey = this.map.keys().next().value;
-      this.map.delete(firstKey);
+      const first = this.map.keys().next().value;
+      this.map.delete(first);
     }
   }
 }
@@ -36,8 +34,8 @@ const contractCache = new LRUCache(Number(process.env.CONTRACT_CACHE_MAX || 200)
 
 function makeContractCacheKey(question, opts = {}) {
   const domain = opts.domain || 'contract';
-  const smc = opts.smc ? 'smc:1' : 'smc:0';
-  return `${domain}::${smc}::${norm(question)}`;
+  const company = opts.company || '';
+  return `${domain}::${company}::${norm(question)}`;
 }
 
 module.exports = { contractCache, makeContractCacheKey };

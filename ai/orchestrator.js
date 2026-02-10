@@ -115,6 +115,18 @@ async function answerQuestion(question, { threadId = 'default', history = [] } =
     content: d.content || ''
   }));
 
+  // ✅ PROJECT асуултад PROCESS баримтыг ашиглахгүй
+if (domain === 'project') {
+  aiDocs = aiDocs.filter(d => {
+    const n = String(d.fileName || '').toLowerCase();
+    return !(
+      n.includes('процесс') ||
+      n.includes('process') ||
+      n.includes('п_гэрээ')
+    );
+  });
+}
+
   // ✅ CONTRACT guard: never use process docs as contract evidence
   if (domain === 'contract') {
     aiDocs = aiDocs.filter(d => !isProcessDocName(d.fileName));

@@ -1,5 +1,4 @@
 // ai/adaptiveCardBuilder.js
-
 function truncate(text = '', max = 70) {
   if (text.length <= max) return text;
   return text.slice(0, max - 1) + '…';
@@ -30,7 +29,6 @@ function buildCopilotAdaptiveCard({
 }) {
   const body = [];
 
-  // ===== Header + Domain badge =====
   body.push({
     type: 'ColumnSet',
     columns: [
@@ -61,7 +59,6 @@ function buildCopilotAdaptiveCard({
     ]
   });
 
-  // ===== TL;DR =====
   if (summary) {
     body.push({
       type: 'Container',
@@ -74,12 +71,11 @@ function buildCopilotAdaptiveCard({
     });
   }
 
-  // ===== Key points (yellow highlight) =====
-  const kp = Array.isArray(keyPoints) ? keyPoints.filter(Boolean).slice(0, 6) : [];
+  const kp = Array.isArray(keyPoints) ? keyPoints.filter(Boolean).slice(0, 8) : [];
   if (kp.length) {
     body.push({
       type: 'Container',
-      style: 'attention', // ✅ шар/анхаарал татах style [6](https://adaptivecards.microsoft.com/?topic=Container)[7](https://learn.microsoft.com/en-us/adaptive-cards/schema-explorer/container)
+      style: 'attention',
       spacing: 'Medium',
       items: [
         { type: 'TextBlock', text: '🔍 Key points', weight: 'Bolder' },
@@ -88,31 +84,22 @@ function buildCopilotAdaptiveCard({
     });
   }
 
-  // ===== Table (FactSet) =====
   const fx = Array.isArray(facts)
     ? facts
         .map(f => ({ title: String(f?.title || '').trim(), value: String(f?.value || '').trim() }))
         .filter(f => f.title && f.value)
-        .slice(0, 10)
+        .slice(0, 14)
     : [];
-
   if (fx.length) {
     body.push({ type: 'TextBlock', text: '📌 Нөхцөл / Утга', weight: 'Bolder', spacing: 'Medium' });
-    body.push({
-      type: 'FactSet',      // ✅ key/value table [8](https://learn.microsoft.com/en-us/adaptive-cards/schema-explorer/fact-set)
-      facts: fx
-    });
+    body.push({ type: 'FactSet', facts: fx });
   }
 
-  // ===== Steps (only when present) =====
   if (Array.isArray(steps) && steps.length > 0) {
     body.push({ type: 'TextBlock', text: '🪜 Алхамууд', weight: 'Bolder', spacing: 'Medium' });
-    steps.slice(0, 10).forEach((s, i) => {
-      body.push({ type: 'TextBlock', text: `${i + 1}. ${s}`, wrap: true });
-    });
+    steps.slice(0, 10).forEach((s, i) => body.push({ type: 'TextBlock', text: `${i + 1}. ${s}`, wrap: true }));
   }
 
-  // ===== Notes / warnings =====
   if (notes) {
     body.push({
       type: 'Container',
@@ -125,37 +112,23 @@ function buildCopilotAdaptiveCard({
     });
   }
 
-  // ===== Follow-up suggestions (bullets + buttons) =====
   const fu = Array.isArray(followUps) ? followUps.filter(Boolean).slice(0, 4) : [];
   if (fu.length) {
     body.push({ type: 'TextBlock', text: '🧠 Та бас ингэж асууж болно', weight: 'Bolder', spacing: 'Medium' });
-
-    // bullets
     fu.forEach(s => body.push({ type: 'TextBlock', text: `• ${s}`, wrap: true, isSubtle: true }));
-
-    // buttons (Teams messageBack)
     body.push({
       type: 'ActionSet',
-      actions: fu.map((s) => ({
+      actions: fu.map(s => ({
         type: 'Action.Submit',
         title: truncate(s, 32),
         data: {
-          // ✅ Teams messageBack — button дархад bot руу текст буцаана [9](https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/cards-actions)
-          msteams: {
-            type: 'messageBack',
-            text: s,
-            displayText: s
-          }
+          msteams: { type: 'messageBack', text: s, displayText: s }
         }
       }))
     });
   }
 
-  // ===== Sources =====
-  const links = Array.isArray(citations)
-    ? citations.filter(c => c && c.webUrl).slice(0, 5)
-    : [];
-
+  const links = Array.isArray(citations) ? citations.filter(c => c && c.webUrl).slice(0, 5) : [];
   if (links.length) {
     body.push({ type: 'TextBlock', text: '🔗 Эх сурвалж', weight: 'Bolder', spacing: 'Medium' });
     body.push({
@@ -168,17 +141,11 @@ function buildCopilotAdaptiveCard({
     });
   }
 
-  // ===== Confidence =====
   if (typeof confidence === 'number') {
     body.push({ type: 'TextBlock', text: `📊 Итгэлцэл: ${confidence}%`, isSubtle: true, spacing: 'Medium' });
   }
 
-  return {
-    type: 'AdaptiveCard',
-    version: '1.5',
-    $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-    body
-  };
+  return { type: 'AdaptiveCard', version: '1.5', $schema: 'http://adaptivecards.io/schemas/adaptive-card.json', body };
 }
 
 module.exports = { buildCopilotAdaptiveCard };

@@ -11,7 +11,7 @@ const path = require('path');
 const {
   SEARCH_ENDPOINT,
   SEARCH_KEY,
-  INDEX_NAME = 'process-docs',
+  INDEX_NAME = 'zag-docs',
   SP_PROCESS_FOLDER,
   SP_FILE_TYPES,
   SP_SITE_ID

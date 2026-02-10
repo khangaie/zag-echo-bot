@@ -3,7 +3,7 @@ const axios = require('axios');
 
 const SEARCH_ENDPOINT = process.env.SEARCH_ENDPOINT;
 const SEARCH_KEY = process.env.SEARCH_KEY;
-const INDEX_NAME = process.env.INDEX_NAME || 'process-docs';
+const INDEX_NAME = process.env.INDEX_NAME || 'zag-docs';
 
 /**
  * Энгийн (семантикгүй) хайлт.

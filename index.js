@@ -38,4 +38,3 @@ app.post('/api/messages', (req, res) => {
 
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`🚀 Bot running on ${port}`));
-``

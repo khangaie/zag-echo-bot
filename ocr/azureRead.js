@@ -1,6 +1,4 @@
-// ocr/azureRead.js
 const axios = require('axios');
-
 axios.defaults.timeout = Number(process.env.HTTP_TIMEOUT_MS || 30000);
 
 function trimSlash(s) {
@@ -13,14 +11,6 @@ function normRoute(r) {
   return x.toLowerCase();
 }
 
-/**
- * Document Intelligence / Form Recognizer prebuilt-layout
- * ENV:
- *  AZURE_DI_ENDPOINT=https://<resource>.cognitiveservices.azure.com
- *  AZURE_DI_KEY=...
- *  AZURE_DI_API_VERSION=2023-07-31 (or 2023-10-31-preview)
- *  AZURE_DI_ROUTE=formrecognizer  (or documentintelligence)
- */
 async function extractTextWithOCR(buffer) {
   const endpoint = trimSlash(process.env.AZURE_DI_ENDPOINT);
   const key = process.env.AZURE_DI_KEY;
@@ -38,8 +28,8 @@ async function extractTextWithOCR(buffer) {
     submit = await axios.post(submitUrl, buffer, {
       headers: {
         'Ocp-Apim-Subscription-Key': key,
-        'Content-Type': 'application/pdf'
-      }
+        'Content-Type': 'application/pdf',
+      },
     });
   } catch (e) {
     const msg = e.response?.data?.error?.message || e.message;
@@ -53,15 +43,14 @@ async function extractTextWithOCR(buffer) {
   const timeoutMs = 120000;
 
   while (Date.now() - started < timeoutMs) {
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 1500));
     const poll = await axios.get(opLoc, {
-      headers: { 'Ocp-Apim-Subscription-Key': key }
+      headers: { 'Ocp-Apim-Subscription-Key': key },
     });
 
     const st = String(poll.data?.status || '').toLowerCase();
     if (st === 'succeeded') {
-      const content = poll.data.analyzeResult?.content || '';
-      return String(content);
+      return String(poll.data.analyzeResult?.content || '');
     }
     if (st === 'failed') {
       const msg = poll.data?.error?.message || JSON.stringify(poll.data);

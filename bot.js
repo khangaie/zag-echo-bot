@@ -1,61 +1,34 @@
-// bot.js (2-step reply version)
 const { ActivityHandler } = require('botbuilder');
 
-const FEATURE_RAG_CARD = (process.env.FEATURE_RAG_CARD || '1') === '1';
-const historyMap = new Map();
-
-function pushHistory(convId, role, text) {
-  const h = historyMap.get(convId) || [];
-  h.push({ role, text });
-  historyMap.set(convId, h.slice(-6));
-}
-
-function extractQuestion(activity) {
-  const t = String(activity?.text || '').trim();
-  if (t) return t;
-  const v = activity?.value;
-  if (v && typeof v === 'object') {
-    return String(
-      v?.msteams?.text ||
-      v?.msteams?.messageText ||
-      v?.text ||
-      v?.query ||
-      v?.q ||
-      ''
-    ).trim();
-  }
-  return '';
-}
+const FEATURE_RAG_CARD =
+  (process.env.FEATURE_RAG_CARD || '1') === '1';
 
 class ZAGBot extends ActivityHandler {
   constructor() {
     super();
 
     this.onMessage(async (context, next) => {
-      const convId = context.activity.conversation?.id || 'default';
-      const question = extractQuestion(context.activity);
+      const question = (context.activity.text || '').trim();
 
       if (!question) {
         await context.sendActivity('❓ Асуултаа бичнэ үү.');
         return next();
       }
 
-      pushHistory(convId, 'user', question);
-
-      // ✅ STEP 1: Шууд эхний reply (5 сек‑ээс өмнө)
+      // ✅ STEP 1 — шууд reply (504‑өөс аврана)
       await context.sendActivity(
-        '🔍 **Хайж байна...**\nБаримтуудаас шалгаж байна, удахгүй хариу илгээнэ.'
+        '🔍 Хайж байна... түр хүлээнэ үү.'
       );
 
-      // ✅ STEP 2: RAG‑ийг background‑д ажиллуулна
-      this.runRagPipeline(context, convId, question)
-        .catch(err => console.error('[RAG background error]', err));
+      // ✅ STEP 2 — background RAG
+      this.runRag(context, question)
+        .catch(e => console.error('[RAG ERROR]', e));
 
-      return next();
+      await next();
     });
   }
 
-  async runRagPipeline(context, convId, question) {
+  async runRag(context, question) {
     if (!FEATURE_RAG_CARD) {
       await context.sendActivity('ℹ️ RAG унтраалттай байна.');
       return;
@@ -64,52 +37,43 @@ class ZAGBot extends ActivityHandler {
     const { answerQuestion } = require('./ai/orchestrator');
     const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
 
-    // ✅ 25 секунд hard timeout (GatewayTimeout‑оос хамгаална)
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const timer = setTimeout(() => controller.abort(), 25_000);
 
     try {
       const res = await answerQuestion(question, {
-        threadId: convId,
-        history: historyMap.get(convId) || [],
         signal: controller.signal
       });
 
-      clearTimeout(timeout);
+      clearTimeout(timer);
 
-      const card = buildCopilotResponse({
-        question,
-        extractedTextMap: res.extractedTextMap || {},
-        files: (res.docs || []).slice(0, 5), // ✅ card‑ыг хөнгөн
-        ocrUsed: !!res.ocrUsed,
-        ans: res.ans,
-        needSteps: !!res.needSteps,
-        domain: res.domain || 'general',
-        folders: res.folders || []
-      }).adaptiveCard;
+      const card =
+        buildCopilotResponse({
+          question,
+          ans: res.ans,
+          files: (res.docs || []).slice(0, 4),
+          domain: res.domain || 'general',
+          folders: res.folders || []
+        }).adaptiveCard;
 
       await context.sendActivity({
         attachments: [{
-          contentType: 'application/vnd.microsoft.card.adaptive',
+          contentType:
+            'application/vnd.microsoft.card.adaptive',
           content: card
         }]
       });
 
-      if (res?.ans?.tldr) {
-        pushHistory(convId, 'assistant', res.ans.tldr);
-      }
+    } catch (e) {
+      clearTimeout(timer);
 
-    } catch (err) {
-      clearTimeout(timeout);
-
-      if (err.name === 'AbortError') {
+      if (e.name === 'AbortError') {
         await context.sendActivity(
-          '⏱️ Хайлт удааширлаа.\n👉 Асуултаа арай тодорхой болгож асуугаарай.'
+          '⏱️ Хайлт удааширлаа. Асуултаа арай товчхон асуугаарай.'
         );
         return;
       }
 
-      console.error('[RAG error]', err);
       await context.sendActivity('🚨 Дотоод алдаа гарлаа.');
     }
   }

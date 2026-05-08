@@ -1,9 +1,9 @@
-// bot.js
+// bot.js (2-step reply version)
 const { ActivityHandler } = require('botbuilder');
 
-const FEATURE_RAG_CARD = (process.env.FEATURE_RAG_CARD || '0') === '1';
-
+const FEATURE_RAG_CARD = (process.env.FEATURE_RAG_CARD || '1') === '1';
 const historyMap = new Map();
+
 function pushHistory(convId, role, text) {
   const h = historyMap.get(convId) || [];
   h.push({ role, text });
@@ -13,14 +13,16 @@ function pushHistory(convId, role, text) {
 function extractQuestion(activity) {
   const t = String(activity?.text || '').trim();
   if (t) return t;
-
   const v = activity?.value;
   if (v && typeof v === 'object') {
-    const mt = v.msteams;
-    const candidate =
-      (mt && (mt.text || mt.messageText || mt.displayText)) ||
-      v.text || v.query || v.q;
-    if (candidate) return String(candidate).trim();
+    return String(
+      v?.msteams?.text ||
+      v?.msteams?.messageText ||
+      v?.text ||
+      v?.query ||
+      v?.q ||
+      ''
+    ).trim();
   }
   return '';
 }
@@ -28,16 +30,6 @@ function extractQuestion(activity) {
 class ZAGBot extends ActivityHandler {
   constructor() {
     super();
-
-    this.onMembersAdded(async (context, next) => {
-      const welcome =
-        "👋 Сайн байна уу?\n\n" +
-        "Би **Заг Инженеринг ХХК**‑ийн хиймэл оюун ухааны туслах бот байна.\n" +
-        "📚 SharePoint мэдлэгийн сангаас хайлт хийж, баримтад тулгуурлан хариулна.\n\n" +
-        "Та асуултаа бичээрэй 😊";
-      await context.sendActivity(welcome);
-      await next();
-    });
 
     this.onMessage(async (context, next) => {
       const convId = context.activity.conversation?.id || 'default';
@@ -50,59 +42,76 @@ class ZAGBot extends ActivityHandler {
 
       pushHistory(convId, 'user', question);
 
-      // ✅ Typing indicator - GatewayTimeout болохоос сэргийлнэ
-      try { await context.sendActivity({ type: 'typing' }); } catch {}
+      // ✅ STEP 1: Шууд эхний reply (5 сек‑ээс өмнө)
+      await context.sendActivity(
+        '🔍 **Хайж байна...**\nБаримтуудаас шалгаж байна, удахгүй хариу илгээнэ.'
+      );
 
-      // ✅ 4 секунд тутам typing давтана (Bot Framework 15с timeout-аас өмнө)
-      const typingInterval = setInterval(async () => {
-        try { await context.sendActivity({ type: 'typing' }); } catch {}
-      }, 4000);
+      // ✅ STEP 2: RAG‑ийг background‑д ажиллуулна
+      this.runRagPipeline(context, convId, question)
+        .catch(err => console.error('[RAG background error]', err));
 
-      try {
-        if (FEATURE_RAG_CARD) {
-          const { answerQuestion } = require('./ai/orchestrator');
-          const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
-
-          const res = await answerQuestion(question, {
-            threadId: convId,
-            history: historyMap.get(convId) || []
-          });
-
-          clearInterval(typingInterval);
-
-          const card = buildCopilotResponse({
-            question,
-            extractedTextMap: res.extractedTextMap || {},
-            files: res.docs || [],
-            ocrUsed: !!res.ocrUsed,
-            ans: res.ans,
-            needSteps: !!res.needSteps,
-            domain: res.domain || 'general',
-            folders: res.folders || []
-          }).adaptiveCard;
-
-          await context.sendActivity({
-            attachments: [{
-              contentType: 'application/vnd.microsoft.card.adaptive',
-              content: card
-            }]
-          });
-
-          if (res?.ans?.tldr) pushHistory(convId, 'assistant', res.ans.tldr);
-          return next();
-        }
-
-        clearInterval(typingInterval);
-        await context.sendActivity('ℹ️ RAG унтраалттай байна.');
-        return next();
-
-      } catch (e) {
-        clearInterval(typingInterval);
-        console.error('[onMessage error]', e);
-        await context.sendActivity('🚨 Дотоод алдаа гарлаа. Дараа дахин оролдоно уу.');
-        return next();
-      }
+      return next();
     });
+  }
+
+  async runRagPipeline(context, convId, question) {
+    if (!FEATURE_RAG_CARD) {
+      await context.sendActivity('ℹ️ RAG унтраалттай байна.');
+      return;
+    }
+
+    const { answerQuestion } = require('./ai/orchestrator');
+    const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
+
+    // ✅ 25 секунд hard timeout (GatewayTimeout‑оос хамгаална)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+
+    try {
+      const res = await answerQuestion(question, {
+        threadId: convId,
+        history: historyMap.get(convId) || [],
+        signal: controller.signal
+      });
+
+      clearTimeout(timeout);
+
+      const card = buildCopilotResponse({
+        question,
+        extractedTextMap: res.extractedTextMap || {},
+        files: (res.docs || []).slice(0, 5), // ✅ card‑ыг хөнгөн
+        ocrUsed: !!res.ocrUsed,
+        ans: res.ans,
+        needSteps: !!res.needSteps,
+        domain: res.domain || 'general',
+        folders: res.folders || []
+      }).adaptiveCard;
+
+      await context.sendActivity({
+        attachments: [{
+          contentType: 'application/vnd.microsoft.card.adaptive',
+          content: card
+        }]
+      });
+
+      if (res?.ans?.tldr) {
+        pushHistory(convId, 'assistant', res.ans.tldr);
+      }
+
+    } catch (err) {
+      clearTimeout(timeout);
+
+      if (err.name === 'AbortError') {
+        await context.sendActivity(
+          '⏱️ Хайлт удааширлаа.\n👉 Асуултаа арай тодорхой болгож асуугаарай.'
+        );
+        return;
+      }
+
+      console.error('[RAG error]', err);
+      await context.sendActivity('🚨 Дотоод алдаа гарлаа.');
+    }
   }
 }
 

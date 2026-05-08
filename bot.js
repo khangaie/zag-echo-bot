@@ -50,10 +50,16 @@ class ZAGBot extends ActivityHandler {
 
       pushHistory(convId, 'user', question);
 
+      // ✅ Typing indicator - GatewayTimeout болохоос сэргийлнэ
+      try { await context.sendActivity({ type: 'typing' }); } catch {}
+
+      // ✅ 4 секунд тутам typing давтана (Bot Framework 15с timeout-аас өмнө)
+      const typingInterval = setInterval(async () => {
+        try { await context.sendActivity({ type: 'typing' }); } catch {}
+      }, 4000);
+
       try {
         if (FEATURE_RAG_CARD) {
-          await context.sendActivity('🔎 Баримтаас хайж байна…');
-
           const { answerQuestion } = require('./ai/orchestrator');
           const { buildCopilotResponse } = require('./ai/copilotResponseBuilder');
 
@@ -61,6 +67,8 @@ class ZAGBot extends ActivityHandler {
             threadId: convId,
             history: historyMap.get(convId) || []
           });
+
+          clearInterval(typingInterval);
 
           const card = buildCopilotResponse({
             question,
@@ -84,10 +92,12 @@ class ZAGBot extends ActivityHandler {
           return next();
         }
 
+        clearInterval(typingInterval);
         await context.sendActivity('ℹ️ RAG унтраалттай байна.');
         return next();
 
       } catch (e) {
+        clearInterval(typingInterval);
         console.error('[onMessage error]', e);
         await context.sendActivity('🚨 Дотоод алдаа гарлаа. Дараа дахин оролдоно уу.');
         return next();

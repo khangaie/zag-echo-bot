@@ -3,20 +3,16 @@ const { ConfidentialClientApplication } = require("@azure/msal-node");
 
 /**
  * Шаардлагатай ENV:
- *  - MicrosoftAppId            → App registration → Application (client) ID
- *  - MicrosoftAppPassword      → Client secret VALUE (expiry OK эсэхээ шалга)
- *  - MicrosoftAppTenantId      → Directory (tenant) ID  (SingleTenant үед заавал)
- *
- *  Public Azure (global) authority:
- *    https://login.microsoftonline.com/<tenantId>
- *  National cloud ашиглаж байвал authority-г өөрчилнө (ж: Azure China гэх мэт).
+ *  - SP_CLIENT_ID       → SharePoint/Graph App registration → Application (client) ID
+ *  - SP_CLIENT_SECRET   → Client secret VALUE
+ *  - SP_TENANT_ID       → Directory (tenant) ID
  */
 
 const msalClient = new ConfidentialClientApplication({
   auth: {
-    clientId: process.env.MicrosoftAppId,
-    authority: `https://login.microsoftonline.com/${process.env.MicrosoftAppTenantId}`,
-    clientSecret: process.env.MicrosoftAppPassword,
+    clientId: process.env.SP_CLIENT_ID,
+    authority: `https://login.microsoftonline.com/${process.env.SP_TENANT_ID}`,
+    clientSecret: process.env.SP_CLIENT_SECRET,
   },
 });
 
